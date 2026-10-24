@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Streamlit — TAJNE NIKAD U REPO
+.streamlit/secrets.toml
+.streamlit/secrets.yaml
+secrets.toml
+
+# okolina
+.venv/
+venv/
+env/
+*.egg-info/
+
+# uredski i privremeni
+~$*
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db

@@ -169,6 +169,45 @@ def _osvjezi():
     st.rerun()
 
 
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _info_baze() -> list[str]:
+    """Kratka dijagnostika: koji Sheet, postoji li tab `Zadaci`, koliko redaka, koja zaglavlja."""
+    from banka import TAB_ZADACI
+
+    redci = []
+    try:
+        sheet = _baza()
+        redci.append(f"· Sheet: **{getattr(sheet, 'title', '(nepoznat)')}**")
+        redci.append(f"· ID Sheeta: `{str(getattr(sheet, 'id', ''))[:12]}…`")
+    except Exception as e:                              # noqa: BLE001
+        return [f"· Sheet se ne može otvoriti: {e}"]
+
+    naslovi = []
+    try:
+        naslovi = [w.title for w in sheet.worksheets()]
+        redci.append(f"· Tabovi ({len(naslovi)}): " + ", ".join(naslovi[:12]) + ("…" if len(naslovi) > 12 else ""))
+    except Exception as e:                              # noqa: BLE001
+        redci.append(f"· Tabove nije moguće popisati: {e}")
+
+    if TAB_ZADACI not in naslovi:
+        redci.append(f"· ⚠️ **Nema taba `{TAB_ZADACI}`** — `SHEET_ID` vjerojatno pokazuje na pogrešan Sheet.")
+        return redci
+
+    try:
+        ws = sheet.worksheet(TAB_ZADACI)
+        svi = ws.get_all_values()
+        redci.append(f"· Tab `{TAB_ZADACI}`: **{max(0, len(svi) - 1)}** redaka, "
+                     f"{len(svi[0]) if svi else 0} stupaca")
+        if svi:
+            zagl = [str(h) for h in svi[0]]
+            redci.append("· Zaglavlje: " + ", ".join(zagl[:10]) + ("…" if len(zagl) > 10 else ""))
+            redci.append("· Video stupac: " + ("`video_url` ✅" if "video_url" in zagl else "**nema**"))
+    except Exception as e:                              # noqa: BLE001
+        redci.append(f"· Tab `{TAB_ZADACI}` se ne može pročitati: {e}")
+    return redci
+
+
 # ------------------------------------------------------------------ zaglavlje
 
 st.title("🧪 Testovi — nova generacija")
@@ -190,21 +229,7 @@ with st.sidebar:
               help="Kad je isključeno, nijedan podatak se ne upisuje (samo čitanje). "
                    "Uključi tek kad želiš spremiti test ili objaviti učenicima.")
     tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
-    st.divider()
-    with st.expander("🔧 Pripremi tabove (samo prvi put)"):
-        st.warning("Ovo stvara **nove** tabove u CRM Sheetu. Postojeće tabove i bazu zadataka "
-                   "**ne dira**. Ako tabovi već postoje, ništa se ne mijenja.")
-        st.caption("Tabovi koji nastaju: " + ", ".join(tablice.ZAGLAVLJA) + ".")
-        _potvrda = st.checkbox("Razumijem da se radi o ŽIVOM CRM Sheetu", key="v2_potvrdi_tabovi")
-        if st.button("Napravi tabove", disabled=not (_potvrda and st.session_state.get("v2_upis"))):
-            try:
-                napravljeni = tablice.osiguraj_sve(_sheet())
-                st.success(f"Napravljeno: {', '.join(napravljeni) or 'već postoji — ništa nije mijenjano'}")
-                _osvjezi()
-            except Exception as e:                      # noqa: BLE001
-                st.error(f"Nije uspjelo: {e}")
-        if not st.session_state.get("v2_upis"):
-            st.caption("Uključi upis u bočnoj traci da bi gumb radio.")
+    st.caption("Tabove pripremaš u ⚙️ Postavkama (jednom, prvi put).")
 
 tab_testovi, tab_objavi, tab_rezultati, tab_postavke = st.tabs(
     ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "⚙️ Postavke"])
@@ -234,8 +259,8 @@ with tab_testovi:
 
     zadaci_svi = _zadaci()
     if not zadaci_svi:
-        st.warning("Baza je prazna ili se ne može pročitati — provjeri `SHEET_ID` i dijeljenje Sheeta.")
-        st.stop()
+        # `st.stop()` OVDJE NE SMIJE — zaustavio bi cijelu stranicu (i Postavke bi bile prazne).
+        st.warning("Baza se ne može pročitati ili je prazna → **⚙️ Postavke → 🩺 Provjera baze**.")
 
     c1, c2, c3, c4 = st.columns(4)
     f_tekst = c1.text_input("Traži u tekstu / ID-u", key="v2_f_tekst")
@@ -303,144 +328,143 @@ with tab_objavi:
     upute.prikazi(st, "objavi")
     testovi = _testovi()
     if not testovi:
-        st.info("Prvo napravi test u kartici 🧪 Testovi.")
-        st.stop()
-
-    opcije_t = {model.tekst(t.get("definicija_id")): t for t in testovi}
-    odabir_t = st.selectbox("Test", list(opcije_t),
-                            format_func=lambda i: f"{opcije_t[i].get('naziv')} · "
-                                                  f"{model.tekst(opcije_t[i].get('status'))}",
-                            key="v2_obj_test")
-    d = opcije_t[odabir_t]
-
-    u_roku = dodjele.rok_dodjele({}, d)
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Zadataka", d.get("broj_zadataka"))
-    k2.metric("Bodova", d.get("bodovi_ukupno"))
-    k3.metric("Rok", f"{model.datum_hr(u_roku['od'])} – {model.datum_hr(u_roku['do'])}")
-    k4.metric("Dodijeljeno", len([x for x in _dodjele()
-                                  if model.tekst(x.get("definicija_id")) == odabir_t]))
-
-    st.markdown("**Kome ide**")
-    nacin = st.radio("Način", ["grupa", "rucno"], horizontal=True,
-                     format_func=lambda k: "👥 Grupa / kanta" if k == "grupa" else "🧑 Šifre učenika",
-                     key="v2_obj_nacin")
-
-    ucenici = []
-    grupa_naziv = ""
-    if nacin == "grupa":
-        grupe = _grupe()
-        if not grupe:
-            st.caption("Nema grupa ni kanti (Upisi / Raspored Mature) — upiši šifre ručno.")
-        else:
-            opcije_g = {g["kod"]: g for g in grupe}
-            odabrane = st.multiselect(
-                "Grupa / kanta", list(opcije_g),
-                format_func=lambda k: f"{opcije_g[k]['naziv']} ({len(opcije_g[k]['ucenici'])} uč.)",
-                key="v2_obj_grupe")
-            for k in odabrane:
-                ucenici += list(opcije_g[k]["ucenici"])
-            grupa_naziv = ", ".join(opcije_g[k]["naziv"] for k in odabrane)
+        st.info("Ova kartica se puni kad postoji barem jedan test. Napravi ga u 🧪 Testovi.")
     else:
-        sifre = st.text_input("Šifre učenika (zarez)", key="v2_obj_sifre",
-                              placeholder="AA1111, BB2222")
-        ucenici = [{"ucenik_id": s.strip().upper()} for s in model.tekst(sifre).split(",") if s.strip()]
+        opcije_t = {model.tekst(x.get("definicija_id")): x for x in testovi}
+        odabir_t = st.selectbox("Test", list(opcije_t),
+                                format_func=lambda i: f"{opcije_t[i].get('naziv')} · "
+                                                      f"{model.tekst(opcije_t[i].get('status'))}",
+                                key="v2_obj_test")
+        d = opcije_t[odabir_t]
 
-    if st.button("📤 Objavi", type="primary", disabled=not ucenici, key="v2_obj_gumb"):
-        try:
-            rez = dodjele.dodaj(_sheet(), d, ucenici, grupa=grupa_naziv, dodijelio="caki")
-            if model.tekst(d.get("status")) == "nacrt":
-                definicije.promijeni_status(_sheet(), odabir_t, "objavljen", korisnik="caki")
-            st.success(f"Dodano **{rez['dodano']}** učenika."
-                       + (f" Preskočeno (već imaju): {len(rez['preskoceno'])}."
-                          if rez["preskoceno"] else ""))
-            _osvjezi()
-        except Exception as e:                          # noqa: BLE001
-            st.error(f"Nije uspjelo: {e}")
+        u_roku = dodjele.rok_dodjele({}, d)
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Zadataka", d.get("broj_zadataka"))
+        k2.metric("Bodova", d.get("bodovi_ukupno"))
+        k3.metric("Rok", f"{model.datum_hr(u_roku['od'])} – {model.datum_hr(u_roku['do'])}")
+        k4.metric("Dodijeljeno", len([x for x in _dodjele()
+                                      if model.tekst(x.get("definicija_id")) == odabir_t]))
 
-    moje = [x for x in _dodjele() if model.tekst(x.get("definicija_id")) == odabir_t]
-    if moje:
-        st.markdown(f"**Kome je poslan ({len(moje)})**")
-        st.dataframe([{
-            "Učenik": model.tekst(x.get("ime_djeteta")) or model.tekst(x.get("ucenik_id")),
-            "Šifra": model.tekst(x.get("ucenik_id")),
-            "Grupa": model.tekst(x.get("grupa")) or "—",
-            "Status": model.tekst(x.get("status")),
-            "Rok": (lambda r: f"{model.datum_hr(r['od'])} – {model.datum_hr(r['do'])}"
-                    + (" (od dodjele)" if r["produzen"] else ""))(
-                        dodjele.rok_dodjele(x, d)),
-        } for x in moje], hide_index=True, width="stretch")
+        st.markdown("**Kome ide**")
+        nacin = st.radio("Način", ["grupa", "rucno"], horizontal=True,
+                         format_func=lambda k: "👥 Grupa / kanta" if k == "grupa" else "🧑 Šifre učenika",
+                         key="v2_obj_nacin")
 
+        ucenici, grupa_naziv = [], ""
+        if nacin == "grupa":
+            grupe = _grupe()
+            if not grupe:
+                st.caption("Nema grupa ni kanti (Upisi / Raspored Mature) — upiši šifre ručno.")
+            else:
+                opcije_g = {g["kod"]: g for g in grupe}
+                odabrane = st.multiselect(
+                    "Grupa / kanta", list(opcije_g),
+                    format_func=lambda k: f"{opcije_g[k]['naziv']} ({len(opcije_g[k]['ucenici'])} uč.)",
+                    key="v2_obj_grupe")
+                for k in odabrane:
+                    ucenici += list(opcije_g[k]["ucenici"])
+                grupa_naziv = ", ".join(opcije_g[k]["naziv"] for k in odabrane)
+        else:
+            sifre = st.text_input("Šifre učenika (zarez)", key="v2_obj_sifre",
+                                  placeholder="AA1111, BB2222")
+            ucenici = [{"ucenik_id": s.strip().upper()} for s in model.tekst(sifre).split(",") if s.strip()]
 
-# ------------------------------------------------------------------ 📊 Rezultati
+        if st.button("📤 Objavi", type="primary", disabled=not ucenici, key="v2_obj_gumb"):
+            try:
+                rez = dodjele.dodaj(_sheet(), d, ucenici, grupa=grupa_naziv, dodijelio="caki")
+                if model.tekst(d.get("status")) == "nacrt":
+                    definicije.promijeni_status(_sheet(), odabir_t, "objavljen", korisnik="caki")
+                st.success(f"Dodano **{rez['dodano']}** učenika."
+                           + (f" Preskočeno (već imaju): {len(rez['preskoceno'])}."
+                              if rez["preskoceno"] else ""))
+                _osvjezi()
+            except Exception as e:                      # noqa: BLE001
+                st.error(f"Nije uspjelo: {e}")
+
+        moje = [x for x in _dodjele() if model.tekst(x.get("definicija_id")) == odabir_t]
+        if moje:
+            st.markdown(f"**Kome je poslan ({len(moje)})**")
+            st.dataframe([{
+                "Učenik": model.tekst(x.get("ime_djeteta")) or model.tekst(x.get("ucenik_id")),
+                "Šifra": model.tekst(x.get("ucenik_id")),
+                "Grupa": model.tekst(x.get("grupa")) or "—",
+                "Status": model.tekst(x.get("status")),
+                "Rok": (lambda r: f"{model.datum_hr(r['od'])} – {model.datum_hr(r['do'])}"
+                        + (" (od dodjele)" if r["produzen"] else ""))(dodjele.rok_dodjele(x, d)),
+            } for x in moje], hide_index=True, width="stretch")
+
 
 with tab_rezultati:
     upute.prikazi(st, "rezultati")
     testovi = _testovi()
     if not testovi:
-        st.info("Još nema testova.")
-        st.stop()
-
-    opcije_r = {model.tekst(t.get("definicija_id")): t for t in testovi}
-    odabir_r = st.selectbox("Test", list(opcije_r),
-                            format_func=lambda i: model.tekst(opcije_r[i].get("naziv")),
-                            key="v2_rez_test")
-    d = opcije_r[odabir_r]
-    dod = [x for x in _dodjele() if model.tekst(x.get("definicija_id")) == odabir_r]
-    pok = [p for p in _pokusaji() if model.tekst(p.get("definicija_id")) == odabir_r]
-
-    po_dodjeli = {model.tekst(p.get("dodjela_id")): p for p in pok}
-    redci = []
-    for x in dod:
-        p = po_dodjeli.get(model.tekst(x.get("dodjela_id")))
-        bodovi = model.broj((p or {}).get("bodovi"))
-        maks = model.broj((p or {}).get("bodovi_max"))
-        redci.append({
-            "Učenik": model.tekst(x.get("ime_djeteta")) or model.tekst(x.get("ucenik_id")),
-            "Grupa": model.tekst(x.get("grupa")) or "—",
-            "Predao": "✅" if p else "⏳",
-            "Bodovi": f"{bodovi:g} / {maks:g}" if p else "—",
-            "%": int(round(100 * bodovi / maks)) if maks else "",
-        })
-    redci.sort(key=lambda r: (-(r["%"] if isinstance(r["%"], int) else -1), r["Učenik"]))
-    for i, r in enumerate(redci, start=1):
-        r["Mj."] = i if isinstance(r["%"], int) else ""
-
-    if not redci:
-        st.info("Ovaj test još nije nikome poslan (kartica 👥 Objavi).")
+        st.info("Ova kartica se puni kad postoji barem jedan test.")
     else:
-        predali = [r["%"] for r in redci if isinstance(r["%"], int)]
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Predalo", f"{len(predali)} / {len(redci)}")
-        m2.metric("Prosjek", f"{int(round(sum(predali) / len(predali)))} %" if predali else "—")
-        m3.metric("Raspon", f"{min(predali)}–{max(predali)} %" if predali else "—")
-        st.dataframe([{k: r[k] for k in ("Mj.", "Učenik", "Grupa", "Predao", "Bodovi", "%")}
-                      for r in redci], hide_index=True, width="stretch")
-        nisu = [r["Učenik"] for r in redci if r["Predao"] != "✅"]
-        if nisu:
-            st.warning("**Nije predalo:** " + ", ".join(nisu[:20]) + (" …" if len(nisu) > 20 else ""))
+        opcije_r = {model.tekst(x.get("definicija_id")): x for x in testovi}
+        odabir_r = st.selectbox("Test", list(opcije_r),
+                                format_func=lambda i: model.tekst(opcije_r[i].get("naziv")),
+                                key="v2_rez_test")
+        d = opcije_r[odabir_r]
+        dod = [x for x in _dodjele() if model.tekst(x.get("definicija_id")) == odabir_r]
+        pok = [p for p in _pokusaji() if model.tekst(p.get("definicija_id")) == odabir_r]
 
+        po_dodjeli = {model.tekst(p.get("dodjela_id")): p for p in pok}
+        redci = []
+        for x in dod:
+            p = po_dodjeli.get(model.tekst(x.get("dodjela_id")))
+            bodovi = model.broj((p or {}).get("bodovi"))
+            maks = model.broj((p or {}).get("bodovi_max"))
+            redci.append({
+                "Učenik": model.tekst(x.get("ime_djeteta")) or model.tekst(x.get("ucenik_id")),
+                "Grupa": model.tekst(x.get("grupa")) or "—",
+                "Predao": "✅" if p else "⏳",
+                "Bodovi": f"{bodovi:g} / {maks:g}" if p else "—",
+                "%": int(round(100 * bodovi / maks)) if maks else "",
+            })
+        redci.sort(key=lambda r: (-(r["%"] if isinstance(r["%"], int) else -1), r["Učenik"]))
+        for i, r in enumerate(redci, start=1):
+            r["Mj."] = i if isinstance(r["%"], int) else ""
 
-# ------------------------------------------------------------------ ⚙️ Postavke
+        if not redci:
+            st.info("Ovaj test još nije nikome poslan (kartica 👥 Objavi).")
+        else:
+            predali = [r["%"] for r in redci if isinstance(r["%"], int)]
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Predalo", f"{len(predali)} / {len(redci)}")
+            m2.metric("Prosjek", f"{int(round(sum(predali) / len(predali)))} %" if predali else "—")
+            m3.metric("Raspon", f"{min(predali)}–{max(predali)} %" if predali else "—")
+            st.dataframe([{k: r[k] for k in ("Mj.", "Učenik", "Grupa", "Predao", "Bodovi", "%")}
+                          for r in redci], hide_index=True, width="stretch")
+            nisu = [r["Učenik"] for r in redci if r["Predao"] != "✅"]
+            if nisu:
+                st.warning("**Nije predalo:** " + ", ".join(nisu[:20])
+                           + (" …" if len(nisu) > 20 else ""))
+
 
 with tab_postavke:
     upute.prikazi(st, "postavke")
-    testovi = _testovi()
-    if testovi:
-        opcije_s = {model.tekst(t.get("definicija_id")): t for t in testovi}
-        odabir_s = st.selectbox("Test", list(opcije_s),
-                                format_func=lambda i: model.tekst(opcije_s[i].get("naziv")),
-                                key="v2_post_test")
-        d = opcije_s[odabir_s]
-        st.markdown("**Što učenik vidi (po ovom testu)**")
-        for red in definicije.sto_vidi(d.get("student_view_json")):
-            st.caption(f"· {red['naziv']} — **{red['znaci']}**")
-        st.caption("Mijenjanje tih razina dolazi u sljedećem koraku (Faza B), kad i ekran rješavanja.")
-    else:
-        st.info("Nema testova — postavke se vežu na test.")
 
-    st.divider()
-    with st.expander("🔑 Tajne koje aplikacija vidi (samo imena, nikad vrijednosti)"):
+    st.subheader("🩺 Provjera sustava")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Upis u bazu", "UKLJUČEN" if tablice.PISANJE else "isključen")
+    testovi_svi = _testovi()
+    c2.metric("Testova", len(testovi_svi))
+    c3.metric("Dodjela", len(_dodjele()))
+
+    # --- baza zadataka
+    with st.expander("🩺 Provjera baze", expanded=not _zadaci()):
+        try:
+            _info = _info_baze()
+            for red in _info:
+                st.caption(red)
+        except Exception as e:                          # noqa: BLE001
+            st.error(f"Baza se ne može provjeriti: {e}")
+        if st.button("↻ Ponovno provjeri bazu", key="v2_provjeri_bazu"):
+            st.cache_data.clear()
+            st.rerun()
+
+    # --- tajne
+    with st.expander("🔑 Tajne koje aplikacija vidi (imena, ne vrijednosti)"):
         try:
             imena = sorted(st.secrets.keys())
         except Exception:                               # noqa: BLE001
@@ -449,27 +473,48 @@ with tab_postavke:
             st.caption("Secrets nije dostupan.")
         for ime in imena:
             vrijednost = _tajna(ime)
-            if ime.startswith("GOOGLE_SERVICE_ACCOUNT") or "PASSWORD" in ime.upper():
+            if ime.startswith("GOOGLE_SERVICE_ACCOUNT") or "PASSWORD" in ime.upper() or "KEY" in ime.upper():
                 stanje = "✅ postavljeno" if vrijednost else "❌ prazno"
             else:
-                stanje = f"`{vrijednost[:8]}…`" if vrijednost else "❌ prazno"
+                stanje = f"`{vrijednost[:10]}…`" if vrijednost else "❌ prazno"
             st.caption(f"· `{ime}` — {stanje}")
-        st.caption("Nikad ne prikazujemo sadržaj ključa ni lozinke — samo prva slova ID-eva.")
 
-    st.markdown("**Baza zadataka**")
-    zadaci_svi = _zadaci()
-    if zadaci_svi:
-        b = banka.brojevi(zadaci_svi)
-        st.caption(f"Ukupno **{b['ukupno']}** · s videom **{b['sa_videom']}** · "
-                   f"cjelina: **{len(b['po_cjelini'])}** · težina: **{len(b['po_tezini'])}**")
+    # --- video
     try:
         info_v = banka.stupci_videa(_baza())
     except Exception as e:                              # noqa: BLE001
         info_v = {"postoji": False, "stupac": "video_url", "stupac_naslov": ""}
-        st.caption(f"Baza se ne može provjeriti: {e}")
-    if info_v["postoji"]:
-        st.success(f"🎬 Stupac `{info_v['stupac']}` postoji u bazi — video rješenja se čitaju odatle. "
-                   "Sustav **ne dodaje** stupce u bazu.")
+        st.caption(f"Video se ne može provjeriti: {e}")
+    if info_v.get("postoji"):
+        st.success(f"🎬 Stupac `{info_v['stupac']}` postoji u bazi — video se čita odatle "
+                   "(sustav **ne dodaje** stupce).")
     else:
-        st.warning(f"U bazi nema stupca `{info_v['stupac']}`. Ako ga želiš koristiti, dodaj ga ručno "
-                   "u tab `Zadaci` — sustav to **ne radi sam** na živoj bazi.")
+        st.warning(f"U bazi nema stupca `{info_v.get('stupac', 'video_url')}`.")
+
+    # --- tabovi
+    st.divider()
+    with st.expander("🔧 Pripremi tabove (samo prvi put)"):
+        st.warning("Ovo stvara **nove** tabove u CRM Sheetu. Postojeće tabove i bazu zadataka "
+                   "**ne dira**. Ako tabovi već postoje, ništa se ne mijenja.")
+        st.caption("Tabovi koji nastaju: " + ", ".join(tablice.ZAGLAVLJA) + ".")
+        _potvrda = st.checkbox("Razumijem da se radi o ŽIVOM CRM Sheetu", key="v2_potvrdi_tabovi")
+        if st.button("Napravi tabove", disabled=not (_potvrda and tablice.PISANJE)):
+            try:
+                napravljeni = tablice.osiguraj_sve(_sheet())
+                st.success(f"Napravljeno: {', '.join(napravljeni) or 'već postoji — ništa nije mijenjano'}")
+                _osvjezi()
+            except Exception as e:                      # noqa: BLE001
+                st.error(f"Nije uspjelo: {e}")
+        if not tablice.PISANJE:
+            st.caption("Uključi upis u bočnoj traci da bi gumb radio.")
+
+    # --- Student View (samo ako ima testova)
+    if testovi_svi:
+        st.divider()
+        opcije_s = {model.tekst(x.get("definicija_id")): x for x in testovi_svi}
+        odabir_s = st.selectbox("Što učenik vidi — za test", list(opcije_s),
+                                format_func=lambda i: model.tekst(opcije_s[i].get("naziv")),
+                                key="v2_post_test")
+        for red in definicije.sto_vidi(opcije_s[odabir_s].get("student_view_json")):
+            st.caption(f"· {red['naziv']} — **{red['znaci']}**")
+        st.caption("Mijenjanje tih razina dolazi uz ekran rješavanja (Faza B).")

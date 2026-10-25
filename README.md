@@ -3,7 +3,10 @@
 **Nova generacija sustava testiranja.** Paralelni razvoj — stara tri repoa (`caki-baza-zadataka`,
 `caki-booking-termina`, `caki-upisi-crm-main`) **se ne diraju** i rade dalje.
 
-Gradi se po `upute/MASTER_SUSTAV_TESTIRANJA.md` (v2.0).
+Gradi se po `CAKI_razvoj/upute/MASTER_SUSTAV_TESTIRANJA.md` (v2.0).
+
+> 📚 **Arhiva razvoja je u mapi `upute/` unutar ovog repoa** — izvještaji po isporuci, kratke upute,
+> arhitektura i dnevnik. Počni od `upute/00_PREGLED.md`.
 
 ---
 
@@ -43,10 +46,30 @@ Ova mapa je samostalna aplikacija. Napravi repo `caki-testovi` (privatan) i push
 
 ```toml
 APP_PASSWORD = "tvoja-lozinka"
-GOOGLE_SERVICE_ACCOUNT_JSON = '''{ ... servisni račun ... }'''
+
+# Za upis u CRM preporučen je ZASEBAN testni račun (odvaja Google kvotu od portala).
+# Ako ga nemaš, dovoljan je i dijeljeni `GOOGLE_SERVICE_ACCOUNT_JSON`.
+GOOGLE_SERVICE_ACCOUNT_JSON_TESTOVI = '''
+{ ... JSON testnog servisnog računa ... }
+'''
+GOOGLE_SERVICE_ACCOUNT_JSON = '''
+{ ... JSON dijeljenog servisnog računa ... }
+'''
+
 SHEET_ID = "ID baze zadataka (caki-baza-zadataka)"
 CRM_SHEET_ID = "ID Sheeta CAKI CRM — Prijave i baza"
 ```
+
+Redoslijed kojim se tajne traže (v. `veza.py`):
+
+| Sheet | Prvo | Ako nema |
+|---|---|---|
+| CRM (upis testova) | `GOOGLE_SERVICE_ACCOUNT_JSON_TESTOVI` | `GOOGLE_SERVICE_ACCOUNT_JSON` |
+| Baza zadataka (čitanje) | `GOOGLE_SERVICE_ACCOUNT_JSON` | `GOOGLE_SERVICE_ACCOUNT_JSON_TESTOVI` |
+
+> **Poznata greška (popravljena 25.10.):** `gspread.authorize()` prima *credentials objekt*, a ne
+> dict — zato se koristi `gspread.service_account_from_dict()`. Simptom je bio
+> `'dict' object has no attribute 'module'`.
 
 Servisni račun treba **Editor** na oba Sheeta (CRM za upis testova, baza samo čitanje).
 

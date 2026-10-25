@@ -485,7 +485,35 @@ with tab_ucenik:
     upute.prikazi(st, "ucenik")
     testovi_u = _testovi()
     if not testovi_u:
-        st.info("Ova kartica se puni kad postoji barem jedan test.")
+        st.info("**Još nema ni jednog testa** — zato je ova kartica prazna. Rješavanje se veže na test.")
+        st.markdown("**Što napraviti:** 🧪 Testovi → označi zadatke → *Spremi kao nacrt* → vrati se ovamo. "
+                    "Ili odmah isprobaj ekran ispod, **bez spremanja**:")
+        with st.expander("⚡ Brzi pregled — 3 zadatka iz baze, ništa se ne sprema"):
+            zadaci_bp = _zadaci()
+            if not zadaci_bp:
+                st.caption("Baza se ne može pročitati — vidi ⚙️ Postavke → 🩺 Provjera baze.")
+            else:
+                opcije_bp = {model.tekst(z.get("id")): z for z in zadaci_bp[:300] if model.tekst(z.get("id"))}
+                odabir_bp = st.multiselect(
+                    "Zadaci za probu (prvih 300 u bazi)", list(opcije_bp),
+                    default=list(opcije_bp)[:3],
+                    format_func=lambda i: f"{i} · {model.tekst(opcije_bp[i].get('tekst'))[:60]}",
+                    key="v2_bp_zadaci")
+                if odabir_bp and st.button("▶ Otvori pregled", type="primary", key="v2_bp_otvori"):
+                    try:
+                        d_bp = definicije.nova_definicija(
+                            definicija_id="PREGLED", naziv="Brzi pregled", predmet="matematika",
+                            zadaci_=[opcije_bp[i] for i in odabir_bp], trajanje_min=45,
+                            status="objavljen")
+                        dodjela_bp = {
+                            "dodjela_id": "PREGLED-BP", "definicija_id": "PREGLED",
+                            "ucenik_id": "PREGLED", "ime_djeteta": "Pregled",
+                            "varijanta_seed": "PREGLED:BP", "status": "dodijeljeno",
+                        }
+                        st.session_state["v2_bp_aktivno"] = True
+                        ekran_ucenika.prikazi(st, None, d_bp, dodjela_bp, dry=True)
+                    except Exception as e:              # noqa: BLE001
+                        st.error(f"Pregled se ne može otvoriti: {e}")
     else:
         opcije_u = {model.tekst(x.get("definicija_id")): x for x in testovi_u}
         odabir_u = st.selectbox("Test", list(opcije_u),

@@ -65,6 +65,49 @@ if "v2_upis" not in st.session_state:
 tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
 
 
+# ------------------------------------------------------------------ provjera tajni
+OBAVEZNE_TAJNE = {
+    "CRM_SHEET_ID": ("ID Sheeta „CAKI CRM — Prijave i baza”",
+                     "u URL-u Sheeta: docs.google.com/spreadsheets/d/**ID**/edit"),
+    "SHEET_ID": ("ID baze zadataka (caki-baza-zadataka)",
+                 "u URL-u Sheeta: docs.google.com/spreadsheets/d/**ID**/edit"),
+}
+
+
+def _tajna(kljuc: str, zadano: str = "") -> str:
+    try:
+        return str(st.secrets.get(kljuc) or zadano).strip()
+    except Exception:                                   # noqa: BLE001 — nema secrets.toml
+        return zadano
+
+
+def _nedostajuce() -> list[tuple[str, str, str]]:
+    izlaz = []
+    for kljuc, (opis, gdje) in OBAVEZNE_TAJNE.items():
+        if not _tajna(kljuc):
+            izlaz.append((kljuc, opis, gdje))
+    if not any(_tajna(k) for k in ("GOOGLE_SERVICE_ACCOUNT_JSON_TESTOVI",
+                                   "GOOGLE_SERVICE_ACCOUNT_JSON")):
+        izlaz.append(("GOOGLE_SERVICE_ACCOUNT_JSON(_TESTOVI)",
+                      "JSON servisnog računa", "Streamlit → Settings → Secrets"))
+    return izlaz
+
+
+_nedostaje = _nedostajuce()
+if _nedostaje:
+    st.error("**Aplikacija još nema sve tajne u Streamlit Secrets.** Dodaj ovo pa Reboot:")
+    for kljuc, opis, gdje in _nedostaje:
+        st.markdown(f"- `{kljuc}` — {opis}\n  — *{gdje}*")
+    st.info("**Najlakše:** otvori aplikaciju koja već radi (npr. `caki-baza-zadataka`) → "
+            "⋮ → Settings → Secrets → kopiraj odatle `SHEET_ID` i `CRM_SHEET_ID` (iste su vrijednosti).")
+    with st.expander("Kako izgleda Secrets kad je ispravno"):
+        st.code('APP_PASSWORD = "lozinka"\n'
+                'CRM_SHEET_ID = "1AbC…"\n'
+                'SHEET_ID = "1XyZ…"\n'
+                'GOOGLE_SERVICE_ACCOUNT_JSON_TESTOVI = \'\'\'{ … }\'\'\'', language="toml")
+    st.stop()
+
+
 # ------------------------------------------------------------------ podaci
 
 @st.cache_resource(show_spinner=False)
@@ -397,6 +440,22 @@ with tab_postavke:
         st.info("Nema testova — postavke se vežu na test.")
 
     st.divider()
+    with st.expander("🔑 Tajne koje aplikacija vidi (samo imena, nikad vrijednosti)"):
+        try:
+            imena = sorted(st.secrets.keys())
+        except Exception:                               # noqa: BLE001
+            imena = []
+        if not imena:
+            st.caption("Secrets nije dostupan.")
+        for ime in imena:
+            vrijednost = _tajna(ime)
+            if ime.startswith("GOOGLE_SERVICE_ACCOUNT") or "PASSWORD" in ime.upper():
+                stanje = "✅ postavljeno" if vrijednost else "❌ prazno"
+            else:
+                stanje = f"`{vrijednost[:8]}…`" if vrijednost else "❌ prazno"
+            st.caption(f"· `{ime}` — {stanje}")
+        st.caption("Nikad ne prikazujemo sadržaj ključa ni lozinke — samo prva slova ID-eva.")
+
     st.markdown("**Baza zadataka**")
     zadaci_svi = _zadaci()
     if zadaci_svi:

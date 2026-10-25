@@ -112,6 +112,40 @@ def po_id(zadaci: list[dict]) -> dict[str, dict]:
     return {model.tekst(z.get("id")): z for z in zadaci or [] if model.tekst(z.get("id"))}
 
 
+
+# ------------------------------------------------------------------ štit za shemu
+
+# Stupci koje v2 STVARNO čita iz taba `Zadaci`. Ako se neki preimenuje ili obriše,
+# `provjeri_shemu()` to javi — bolje nego da polja tiho postanu prazna.
+STUPCI_KOJE_CITAMO = [
+    "id", "tekst_zadatka_latex", "tip_zadatka", "ponudjeni_odgovori", "konacan_odgovor",
+    "bodovi", "slika_putanja", "cjelina", "potpoglavlje", "tezina", "bloom", "video_url",
+]
+# Neobavezni (ako ih nema, sustav radi dalje)
+STUPCI_NEOBAVEZNI = ["uloga", "izvor_naziv", "razred", "max_bodovi", "rjesenje"]
+
+
+def provjeri_shemu(sheet) -> dict:
+    """Koje od očekivanih stupaca baza ima, a koji nedostaju. Ne mijenja ništa.
+
+    Vraća {"postoji", "stupaca", "nedostaju": [...], "neobavezni_nedostaju": [...], "zaglavlje": [...]}
+    """
+    try:
+        ws = sheet.worksheet(TAB_ZADACI)
+        zagl = [model.tekst(h) for h in (ws.row_values(1) or [])]
+    except Exception:                                   # noqa: BLE001
+        return {"postoji": False, "stupaca": 0, "nedostaju": list(STUPCI_KOJE_CITAMO),
+                "neobavezni_nedostaju": list(STUPCI_NEOBAVEZNI), "zaglavlje": []}
+    ima = set(zagl)
+    return {
+        "postoji": True,
+        "stupaca": len(zagl),
+        "nedostaju": [s for s in STUPCI_KOJE_CITAMO if s not in ima],
+        "neobavezni_nedostaju": [s for s in STUPCI_NEOBAVEZNI if s not in ima],
+        "zaglavlje": zagl,
+    }
+
+
 # ------------------------------------------------------------------ pretraga
 
 def filtriraj(zadaci: list[dict], *, tekst: str = "", cjelina: str = "", potpoglavlje: str = "",

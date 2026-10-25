@@ -487,6 +487,23 @@ with tab_postavke:
                 st.caption(red)
         except Exception as e:                          # noqa: BLE001
             st.error(f"Baza se ne može provjeriti: {e}")
+        try:
+            _shema = banka.provjeri_shemu(_baza())
+            if not _shema["postoji"]:
+                st.error("Tab `Zadaci` nije nađen — provjeri `SHEET_ID`.")
+            elif _shema["nedostaju"]:
+                st.error("**Baza je promijenila shemu — nedostaju stupci koje sustav čita:** "
+                         + ", ".join(f"`{s}`" for s in _shema["nedostaju"])
+                         + ".\n\nAko su preimenovani, javi mi točan naziv — popravak je u "
+                           "`banka.zadatak_iz_retka()` (jedna funkcija).")
+            else:
+                st.success(f"Svi stupci koje sustav čita postoje ({_shema['stupaca']} stupaca u bazi).")
+            if _shema.get("neobavezni_nedostaju"):
+                st.caption("Neobavezni stupci kojih nema (sustav radi i bez njih): "
+                           + ", ".join(f"`{s}`" for s in _shema["neobavezni_nedostaju"]))
+        except Exception as e:                          # noqa: BLE001
+            st.caption(f"Shema se ne može provjeriti: {e}")
+
         if st.button("↻ Ponovno provjeri bazu", key="v2_provjeri_bazu"):
             st.cache_data.clear()
             st.rerun()

@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import streamlit as st
 
+import ai_pomoc
 import model
 import ocjenjivanje
 import provedba
 import rjesavanje
+import slike_zadataka
 import unos_odgovora
 
 
@@ -94,7 +96,7 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
         st.markdown(f"**Zadatak {index + 1}.** ({model.broj(z.get('bodovi'), 1):g} bod.)")
         st.markdown(rjesavanje.pripremi_latex(z.get("tekst")))
         if model.tekst(z.get("slika")):
-            st.caption(f"🖼️ Uz zadatak ide slika: `{model.tekst(z.get('slika'))}`")
+            slike_zadataka.prikazi_sliku_zadatka(st, z.get("slika"))
 
         opcije = [model.tekst(o) for o in (z.get("opcije") or []) if model.tekst(o)]
         if model.tekst(z.get("tip")) == "visestruki_izbor" and len(opcije) >= 2:
@@ -110,6 +112,16 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
             novi = unos_odgovora.unos_odgovora(
                 "Odgovor", key=_k("unos", pokusaj["pokusaj_id"], index),
                 vrijednost_latex=trenutni)
+
+    # 💡 pomoć uz ovo pitanje (bot ne daje rješenje, ograničen broj pitanja)
+    try:
+        ai_pomoc.prikazi_pomoc(
+            st, z,
+            kljuc_testa=f"{dodjela.get('dodjela_id', 'x')}_{index}",
+            secrets=st.secrets,
+        )
+    except Exception:                                  # noqa: BLE001 — pomoć ne smije blokirati
+        pass
 
     if model.tekst(novi) != trenutni:
         st.session_state[k_odg][str(index)] = novi

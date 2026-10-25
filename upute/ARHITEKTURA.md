@@ -34,6 +34,8 @@
 | `rjesavanje.py` | logika rješavanja: napredak, „što nedostaje", povratna informacija po Student View-u | `model`, `ocjenjivanje` |
 | `ekran_ucenika.py` | ekran rješavanja (stvarni učenik ili **pregled** bez upisa) | `provedba`, `rjesavanje`, `unos_odgovora`, `banka` |
 | `unos_odgovora.py` | matematičko polje (MathLive) + fallback na tekst | — |
+| `slike_zadataka.py` | slika uz zadatak iz Drivea (bez novog paketa, keš u memoriji) | `google-auth`, `requests` |
+| `ai_pomoc.py` | 💡 pomoć: pravila „bez rješenja", max 3 pitanja, DeepSeek/Anthropic | `model` |
 
 ## 3. Model podataka
 

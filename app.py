@@ -463,6 +463,23 @@ with tab_rezultati:
                 st.warning("**Nije predalo:** " + ", ".join(nisu[:20])
                            + (" …" if len(nisu) > 20 else ""))
 
+            # --- pregled rješenja po učeniku (profesor vidi i 🎬 video)
+            st.divider()
+            st.markdown("**Pregled rješenja po učeniku**")
+            zadaci_r = definicije.zadaci(d)
+            for x in dod:
+                p = po_dodjeli.get(model.tekst(x.get("dodjela_id")))
+                if not p:
+                    continue
+                ime = model.tekst(x.get("ime_djeteta")) or model.tekst(x.get("ucenik_id"))
+                bodovi = model.broj(p.get("bodovi"))
+                maks = model.broj(p.get("bodovi_max"))
+                with st.expander(f"{ime} — {bodovi:g}/{maks:g} bodova"):
+                    odg = provedba.odgovori(p)
+                    ekran_ucenika.prikazi_pregled_rjesenja(
+                        st, zadaci_r, odg,
+                        pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True)
+
 
 with tab_ucenik:
     upute.prikazi(st, "ucenik")

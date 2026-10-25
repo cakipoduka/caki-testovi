@@ -31,6 +31,9 @@
 | `ocjenjivanje.py` | tri sloja: string → SymPy → AI (samo predlaže) | `model` |
 | `grupe.py` | grupe Upisa + kante Mature | `model`, `tablice` |
 | `upute.py` | upute unutar aplikacije (nikad zasebna stranica) | — |
+| `rjesavanje.py` | logika rješavanja: napredak, „što nedostaje", povratna informacija po Student View-u | `model`, `ocjenjivanje` |
+| `ekran_ucenika.py` | ekran rješavanja (stvarni učenik ili **pregled** bez upisa) | `provedba`, `rjesavanje`, `unos_odgovora`, `banka` |
+| `unos_odgovora.py` | matematičko polje (MathLive) + fallback na tekst | — |
 
 ## 3. Model podataka
 

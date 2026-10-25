@@ -50,6 +50,24 @@ UPUTE = {
         "pazi": ["Rezultat je prazan dok učenik ne preda — „⏳” nije greška."],
         "dalje": "Mjerenje kvalitete zadatka (težina, diskriminativnost) dolazi u Fazi C.",
     },
+    "ucenik": {
+        "naslov": "Kako izgleda rješavanje (i pregled)",
+        "koraci": [
+            "Odaberi test i način: **👁️ Pregled** (ništa se ne sprema) ili **🧑 Stvarni učenik** "
+            "(učenik ima dodjelu).",
+            "Pitanja se prikazuju **jedno po jedno**; ispod je popis svih pitanja s oznakom je li "
+            "odgovoreno (✓) ili prazno (·).",
+            "Kratki odgovor upisuje se u **matematičko polje** (MathLive); ako polje ne radi, ostaje "
+            "običan tekst.",
+            "Odgovor se **sprema sam** — prekid veze ne briše rad.",
+            "Predaja pokazuje **koliko je prazno** i traži potvrdu.",
+        ],
+        "pazi": [
+            "U pregledu je autosave isključen — ništa se ne zapisuje u Sheet.",
+            "🎬 video i točna rješenja vide se **tek kad Student View to dopušta** (rješenja nakon roka).",
+        ],
+        "dalje": "Rezultati su u kartici 📊 Rezultati.",
+    },
     "postavke": {
         "naslov": "Što učenik vidi (Student View)",
         "koraci": [

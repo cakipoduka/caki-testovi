@@ -17,6 +17,7 @@ import streamlit as st
 import banka
 import definicije
 import dodjele
+import ekran_ucenika
 import grupe
 import model
 import tablice
@@ -244,8 +245,8 @@ with st.sidebar:
     tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
     st.caption("Tabove pripremaš u ⚙️ Postavkama (jednom, prvi put).")
 
-tab_testovi, tab_objavi, tab_rezultati, tab_postavke = st.tabs(
-    ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "⚙️ Postavke"])
+tab_testovi, tab_objavi, tab_rezultati, tab_ucenik, tab_postavke = st.tabs(
+    ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
 
 
 # ------------------------------------------------------------------ 🧪 Testovi
@@ -461,6 +462,63 @@ with tab_rezultati:
             if nisu:
                 st.warning("**Nije predalo:** " + ", ".join(nisu[:20])
                            + (" …" if len(nisu) > 20 else ""))
+
+
+with tab_ucenik:
+    upute.prikazi(st, "ucenik")
+    testovi_u = _testovi()
+    if not testovi_u:
+        st.info("Ova kartica se puni kad postoji barem jedan test.")
+    else:
+        opcije_u = {model.tekst(x.get("definicija_id")): x for x in testovi_u}
+        odabir_u = st.selectbox("Test", list(opcije_u),
+                                format_func=lambda i: f"{model.tekst(opcije_u[i].get('naziv'))} · "
+                                                      f"{model.tekst(opcije_u[i].get('status'))}",
+                                key="v2_uc_test")
+        d_u = opcije_u[odabir_u]
+
+        nacin_u = st.radio("Način", ["pregled", "ucenik"], horizontal=True,
+                           format_func=lambda k: ("👁️ Pregled — ništa se ne sprema" if k == "pregled"
+                                                  else "🧑 Stvarni učenik (ima dodjelu)"),
+                           key="v2_uc_nacin")
+
+        if nacin_u == "pregled":
+            st.caption("Ovo je **točno ono što učenik vidi**: pitanje po pitanju, matematički unos, "
+                       "autosave (ovdje isključen), predaja s upozorenjem. Ništa se ne zapisuje.")
+            _dodjela_pregled = {
+                "dodjela_id": "PREGLED-" + odabir_u,
+                "definicija_id": odabir_u,
+                "ucenik_id": "PREGLED",
+                "ime_djeteta": "Pregled",
+                "varijanta_seed": "PREGLED:" + odabir_u,
+                "status": "dodijeljeno",
+            }
+            try:
+                ekran_ucenika.prikazi(st, _sheet(), d_u, _dodjela_pregled, dry=True)
+            except Exception as e:                      # noqa: BLE001
+                st.error(f"Pregled se ne može otvoriti: {e}")
+        else:
+            sifra_u = st.text_input("Šifra učenika", key="v2_uc_sifra",
+                                    placeholder="AA1111").strip().upper()
+            if not sifra_u:
+                st.caption("Upiši šifru učenika koji ima ovaj test (kartica 👥 Objavi).")
+            else:
+                dodjela_u = dodjele.jedna(_sheet(), odabir_u, sifra_u)
+                if not dodjela_u:
+                    st.warning(f"Učenik `{sifra_u}` nema ovaj test. Dodaj ga u 👥 Objavi.")
+                else:
+                    stanje_u = dodjele.stanje_roka(dodjela_u, d_u)
+                    st.caption(f"Rok: **{model.datum_hr(dodjela_u.get('rok_od')) or '—'}** – "
+                               f"**{model.datum_hr(dodjela_u.get('rok_do')) or '—'}** · stanje: **{stanje_u}**")
+                    if provedba.predano(_sheet(), dodjela_u.get("dodjela_id")):
+                        st.success("Učenik je već predao — vidi 📊 Rezultati.")
+                    elif stanje_u != "otvoren":
+                        st.warning("Rok još nije otvoren ili je prošao — rješavanje nije moguće.")
+                    else:
+                        try:
+                            ekran_ucenika.prikazi(st, _sheet(), d_u, dodjela_u, dry=False)
+                        except Exception as e:          # noqa: BLE001
+                            st.error(f"Rješavanje se ne može otvoriti: {e}")
 
 
 with tab_postavke:

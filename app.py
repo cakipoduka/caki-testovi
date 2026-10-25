@@ -170,6 +170,19 @@ def _osvjezi():
 
 
 
+
+def _je_kopija(naslov: str) -> str:
+    """Vrati upozorenje ako naslov Sheeta izgleda kao kopija/backup, inače prazno."""
+    n = model.tekst(naslov).lower()
+    if not n:
+        return ""
+    for znak in ("copy of", "kopija", "backup", "backup_", "prije cijepanja", "kopija od"):
+        if znak in n:
+            return (f"⚠️ Baza kojoj je aplikacija spojena zove se **„{naslov}”** — to izgleda kao "
+                    "**kopija/backup**, a ne živa baza. Provjeri `SHEET_ID` u Secrets.")
+    return ""
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _info_baze() -> list[str]:
     """Kratka dijagnostika: koji Sheet, postoji li tab `Zadaci`, koliko redaka, koja zaglavlja."""
@@ -239,6 +252,15 @@ tab_testovi, tab_objavi, tab_rezultati, tab_postavke = st.tabs(
 
 with tab_testovi:
     upute.prikazi(st, "testovi")
+
+    # Ako je spojena kopija/backup baze — reci ODMAH, prije bilo kakvog rada.
+    _upoz_baza = ""
+    try:
+        _upoz_baza = _je_kopija(getattr(_baza(), "title", ""))
+    except Exception:                                   # noqa: BLE001
+        _upoz_baza = ""
+    if _upoz_baza:
+        st.error(_upoz_baza)
 
     testovi = _testovi()
     if not testovi:
@@ -445,6 +467,12 @@ with tab_postavke:
     upute.prikazi(st, "postavke")
 
     st.subheader("🩺 Provjera sustava")
+    try:
+        _u = _je_kopija(getattr(_baza(), "title", ""))
+        if _u:
+            st.error(_u)
+    except Exception:                                   # noqa: BLE001
+        pass
     c1, c2, c3 = st.columns(3)
     c1.metric("Upis u bazu", "UKLJUČEN" if tablice.PISANJE else "isključen")
     testovi_svi = _testovi()

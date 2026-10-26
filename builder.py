@@ -122,7 +122,24 @@ def potpoglavlja_za(zadaci: list[dict], cjelina="", sifrarnik=None) -> list[str]
             pp = model.tekst(z.get("potpoglavlje"))
             if pp and pp not in izlaz:
                 izlaz.append(pp)
-    return izlaz
+    if not izlaz:
+        # 26.10.2026. ISPRAVAK: kad šifrarnik NIJE predan (ili nema tu cjelinu), odabir cjeline
+        # je prije vraćao PRAZNU listu — pa je padajući izbornik „Potpoglavlje" izgledao ugašen.
+        # Sada se potpoglavlja izvode iz samih zadataka te cjeline (isti obrazac kao filter u
+        # bazi zadataka), a ako ni toga nema — iz cijele baze, da izbornik nikad ne bude prazan.
+        odabrane_set = set(odabrane)
+        for z in (zadaci or []):
+            if odabrane_set and model.tekst(z.get("cjelina")) not in odabrane_set:
+                continue
+            pp = model.tekst(z.get("potpoglavlje"))
+            if pp and pp not in izlaz:
+                izlaz.append(pp)
+        if not izlaz and odabrane_set:
+            for z in (zadaci or []):
+                pp = model.tekst(z.get("potpoglavlje"))
+                if pp and pp not in izlaz:
+                    izlaz.append(pp)
+    return sorted(izlaz)
 
 
 def neuskaldjeno(zadaci: list[dict], sifrarnik: dict | None = None) -> list[dict]:

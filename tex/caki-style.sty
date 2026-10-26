@@ -1,0 +1,533 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{caki-style}[2026/07/21 Modern Math Textbook Style]
+
+% --- 1. GEOMETRIJA I MARGINE (Maksimalna iskoristivost prostora) ---
+% IZMJENA (8.10.2026., na izricit zahtjev - "maksimalno iskoristi prostor na
+% papiru za zadatke"): margine stisnute sa 1.5-1.7cm. Prvi pokusaj bio je 1cm,
+% ali Caki je nakon probnog printanja trazio da se vrati na 1.3cm (sigurnije za
+% printer) - headheight/headsep/footskip ostaju isti (unutarnji razmak oko
+% zaglavlja/podnozja, ne ukupna margina).
+\RequirePackage[
+    a4paper,
+    top=1.3cm,
+    bottom=1.3cm,
+    left=1.3cm,
+    right=1.3cm,
+    headheight=24pt,
+    headsep=10pt,
+    footskip=16pt
+]{geometry}
+
+% --- 2. JEZIK I FONTOVI ---
+\RequirePackage[croatian,provide=*]{babel}
+\RequirePackage[utf8]{inputenc}
+\RequirePackage[T1]{fontenc}
+\RequirePackage{lmodern}
+\RequirePackage{microtype} % Bolje poravnanje i tipografija
+
+% --- 3. MATEMATIKA I SIMBOLI ---
+\RequirePackage{amsmath, amsfonts, amssymb}
+\RequirePackage{mathtools}
+
+% --- 3b. UNICODE MATEMATICKI ZNAKOVI UPISANI IZRAVNO U TEKST (11.9.2026.) ---
+% Zadaci/rjesenja katkad dolaze iz OCR-a (Mathpix) ili rucnog unosa u Google
+% Sheets gdje je matematicki znak upisan kao gotov Unicode znak (npr. "∪")
+% umjesto LaTeX naredbe (npr. "$\cup$"). Standardni T1+lmodern fontovi NE
+% znaju iscrtati takve znakove izravno pa pdflatex baca fatalnu gresku
+% "Unicode character ... not set up for use with LaTeX." i cijelo
+% kompajliranje padne (vidi CAKI_MASTER_BAZA §25.5 - stvarni slucaj:
+% "T∪Š=\{Matea,Andrea\}" u polju rjesenje). newunicodechar mapira svaki
+% takav znak na odgovarajucu LaTeX naredbu cim se pojavi u izvoru - radi i
+% u tekstu i u matematickom nacinu, rjesava problem u korijenu bez obzira
+% odakle znak dosao (Test Builder PDF, PreTeXt izvoz, bilo koje drugo mjesto
+% koje ucitava ovaj .sty). Popis nize pokriva najcesce znakove koji se
+% pojavljuju u srednjoskolskoj/maturalnoj matematici; ako se u praksi
+% pojavi neki novi neupareni znak, dodaje se ovdje kao nova linija.
+\RequirePackage{newunicodechar}
+\newunicodechar{∪}{\ensuremath{\cup}}
+\newunicodechar{∩}{\ensuremath{\cap}}
+\newunicodechar{∈}{\ensuremath{\in}}
+\newunicodechar{∉}{\ensuremath{\notin}}
+\newunicodechar{⊂}{\ensuremath{\subset}}
+\newunicodechar{⊆}{\ensuremath{\subseteq}}
+\newunicodechar{⊃}{\ensuremath{\supset}}
+\newunicodechar{⊇}{\ensuremath{\supseteq}}
+\newunicodechar{≤}{\ensuremath{\leq}}
+\newunicodechar{≥}{\ensuremath{\geq}}
+\newunicodechar{≠}{\ensuremath{\neq}}
+\newunicodechar{≈}{\ensuremath{\approx}}
+\newunicodechar{≡}{\ensuremath{\equiv}}
+\newunicodechar{±}{\ensuremath{\pm}}
+\newunicodechar{∓}{\ensuremath{\mp}}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{÷}{\ensuremath{\div}}
+\newunicodechar{√}{\ensuremath{\surd}}
+\newunicodechar{∞}{\ensuremath{\infty}}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{←}{\ensuremath{\leftarrow}}
+\newunicodechar{↔}{\ensuremath{\leftrightarrow}}
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+\newunicodechar{⇐}{\ensuremath{\Leftarrow}}
+\newunicodechar{⇔}{\ensuremath{\Leftrightarrow}}
+\newunicodechar{∅}{\ensuremath{\emptyset}}
+\newunicodechar{∀}{\ensuremath{\forall}}
+\newunicodechar{∃}{\ensuremath{\exists}}
+\newunicodechar{∑}{\ensuremath{\sum}}
+\newunicodechar{∏}{\ensuremath{\prod}}
+\newunicodechar{∫}{\ensuremath{\int}}
+\newunicodechar{∂}{\ensuremath{\partial}}
+\newunicodechar{∆}{\ensuremath{\Delta}}
+\newunicodechar{°}{\ensuremath{^\circ}}
+\newunicodechar{π}{\ensuremath{\pi}}
+\newunicodechar{α}{\ensuremath{\alpha}}
+\newunicodechar{β}{\ensuremath{\beta}}
+\newunicodechar{γ}{\ensuremath{\gamma}}
+\newunicodechar{θ}{\ensuremath{\theta}}
+\newunicodechar{λ}{\ensuremath{\lambda}}
+\newunicodechar{μ}{\ensuremath{\mu}}
+\newunicodechar{…}{\ensuremath{\ldots}}
+% --- 15.9.2026.: otvorena/zatvorena zagrada intervala (npr. "⟨-∞,-2⟩", hrvatska
+% notacija otvorenog intervala) izazvala je "! Missing $ inserted" fatalnu gresku
+% u pdflatex kompajliranju (Test Builder). Uzrok: formatiraj_opciju() u
+% pages/2_test_builder.py opciju bez $/\/^/_ znakova salje kao OBICAN TEKST (ne
+% kao matematiku), pa su ⟨/⟩ izasli izravno u .tex IZVAN $...$, bez mape ovdje -
+% pdflatex ih ne zna iscrtati izvan matematickog nacina. Dodano isto kao svi
+% ostali znakovi u ovom popisu.
+\newunicodechar{⟨}{\ensuremath{\langle}}
+\newunicodechar{⟩}{\ensuremath{\rangle}}
+
+% --- 3c. LUK IZNAD SLOVA (\overparen) - NIJE STVARNA amsmath NAREDBA (11.9.2026.) ---
+% Zadaci s kruznim lukovima (npr. "\overparenAB", oznaka duljine luka AB) katkad
+% dolaze iz ekstrakcije (Mathpix/Claude OCR) s naredbom \overparen{AB}, koju
+% generator (2_test_builder.py/pipeline) preuzima doslovno u .tex. PROVJERENO
+% lokalno (grep izvornog amsmath.sty): \overparen NIJE amsmath naredba niti
+% postoji u standardnom pdflatex+T1+lmodern skupu - ne postoji uopce dok se ne
+% ucita paket koji je definira, inace pdflatex baca "Undefined control
+% sequence" i cijelo kompajliranje padne (vidi CAKI_MASTER_BAZA §25.6). Ovo NIJE
+% problem kodiranja znakova (mojibake) - potvrdeno testom, \overparenAB nije
+% Unicode nego cisti ASCII LaTeX poziv nepostojece naredbe.
+%
+% POPRAVAK v1 (prvi pokusaj, NAPUSTEN): paket "yhmath" (\wideparen) - ispravno
+% je radio LOKALNO, ali produkcijski TeX Live na serveru NEMA instaliran
+% yhmath ("! LaTeX Error: File 'yhmath.sty' not found.") - lokalni texlive u
+% test okruzenju ocito je bogatiji od produkcijskog, pa provjera "radi na
+% mom stroju" ovdje NIJE bila dovoljna. Naucena lekcija: ne uvoditi NOVE
+% CTAN pakete cija prisutnost na produkciji nije potvrdena.
+%
+% POPRAVAK v2 (trenutan, BEZ ijednog novog paketa): \overparen je definiran
+% RUCNO koristeci ISKLJUCIVO pakete koji su VEC dokazano ucitani i rade u
+% produkciji (graphicx - vec koristen za \includegraphics slika zadataka;
+% amssymb - vec ucitan, daje simbol \frown). Mjeri sirinu argumenta (\wd0),
+% pa simbol \frown rastegne (\resizebox) tocno na tu sirinu i podigne iznad
+% teksta (\rlap+\raisebox) - vizualno vrlo blizu yhmath rezultatu, radi i s
+% indeksima (npr. \overparen{A_1B_1}) jer se argument tipografski slaze u
+% zasebnom \hbox-u prije mjerenja, neovisno o vanjskom matematickom nacinu.
+\newcommand{\overparen}[1]{%
+    \begingroup
+    \setbox0=\hbox{$#1$}%
+    \ifdim\wd0<1.2em \wd0=1.2em\fi
+    \rlap{\raisebox{\ht0}[0pt][0pt]{\resizebox{\wd0}{0.85ex}{$\frown$}}}%
+    \box0
+    \endgroup
+}
+
+% --- 3d. VELIČINA MATEMATIČKIH FORMULA (8.10.2026., na izričit zahtjev) ---
+% Caki slabije vidi pa zeli matematicke formule/izraze VECE, bez povecanja
+% ostatka teksta. \DeclareMathSizes je ugradena LaTeX2e kernel naredba bas za
+% ovo - kaze "kad je okolni TEKST velicine X, matematicki fontovi (formula/
+% exponent/exponent-na-exponentu) neka se uzmu kao da je tekst velicine Y"
+% - NE dira stvarnu velicinu teksta, samo prebacuje matematiku na "krupnije"
+% matematicke fontove. 10.95pt = \normalsize za 11pt article klasu (size11.clo)
+% - to je velicina kojom se pise tijelo zadatka/rjesenja. 14pt = otprilike
+% dvije LaTeX "stepenice" vece (10.95 -> 12 -> 14.4pt, isto sto i \Large) -
+% script/scriptscript (indeksi/eksponenti) skalirani proporcionalno (iste
+% vrijednosti kernel vec koristi za 14.4pt dizajn-velicinu). Ako ikad zatreba
+% jos vece/manje, mijenja se SAMO drugi broj nize (14).
+\DeclareMathSizes{10.95}{14}{10}{7}
+% Isto i za \small (10pt, size11.clo) - sekcija "Rjesenja" ispisuje se u
+% \small radi kompaktnosti (vidi multicol nize/2_test_builder.py), a konacni
+% odgovori su i dalje formule pa i tu trebaju biti uocljivije, samo blazi skok
+% (12pt) da se ne narusi cilj "sve stane na jednu stranicu".
+\DeclareMathSizes{10}{12}{9}{6.5}
+
+% --- 4. PALETA BOJA (Moderna, profesionalna i dinamična) ---
+\RequirePackage[table, xcdraw]{xcolor}
+\definecolor{MathPrimary}{HTML}{0F172A}    % Tamno plava / Slate (Glavni tekst i naslovi)
+\definecolor{MathAccent}{HTML}{2563EB}     % Kraljevsko plava (Akcenti, brojevi zadataka)
+\definecolor{MathSecondary}{HTML}{0D9488}  % Tirkizna / Teal (Rješenja, potkategorije)
+\definecolor{MathBgLight}{HTML}{F8FAFC}    % Svijetlo siva za pozadine okvira
+\definecolor{MathBorder}{HTML}{E2E8F0}     % Suptilna siva za rubove
+\definecolor{MathWarning}{HTML}{D97706}    % Jantarna/Narančasta za ugradbene napomene
+\definecolor{TextDark}{HTML}{334155}       % Čitljivi tamno sivi tekst
+
+% --- 5. CRTANJE I OKVIRI (TikZ & tcolorbox) ---
+\RequirePackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, shadows.blur}
+\RequirePackage[many]{tcolorbox}
+
+% --- Custom tcolorbox za Zadatke ---
+% before/after skip stisnuti na 2mm/2.2mm (kompaktnost - cilj je da tipičan
+% test od desetak zadataka stane na 2 stranice A4, uz odvojeni list za
+% koncept/postupak koji NIJE dio ovog PDF-a) - default tcolorbox razmak
+% (~\baselineskip) trošio je vidljivo više prostora bez stvarne dobiti.
+%
+% IZMJENA (11.9.2026., na izričit zahtjev): NEMA VIŠE plavog okvira (ruba)
+% oko zadatka niti odvojenog "boxed title" naslovnog pečata ("Zadatak N" u
+% bijelom tekstu na plavoj pozadini) - taskbox je sad samo blago posivljena
+% pozadina bez ruba (boxrule=0pt, colframe=colback da eventualni hairline
+% ostane nevidljiv). Oznaka "Zadatak N (X bod.)" više se NE gradi ovdje kroz
+% tcolorbox 'title=' mehanizam (koji je force-ao zaseban red/pečat) - sad je
+% to obični podebljani plavi tekst koji \zadatak/\zadatakbod ispisuju kao
+% PRVI dio tijela okvira, u ISTOM retku s tekstom zadatka (vidi te naredbe
+% niže) - otud je 'taskbox' okoliš sad samo [1][] (opcije stila), bez
+% obaveznog drugog argumenta za broj zadatka.
+\newtcolorbox{taskbox}[1][]{
+    enhanced,
+    colback=MathBgLight,
+    colframe=MathBgLight,
+    boxrule=0pt,
+    arc=4pt,
+    left=12pt,
+    right=12pt,
+    top=6pt,
+    bottom=6pt,
+    before skip=2mm,
+    after skip=2.2mm,
+    before upper={\raggedright},
+    #1
+}
+
+% --- Custom tcolorbox za Rješenja / Savjete ---
+% IZMJENA (8.10.2026., na izricit zahtjev): isti pristup kao taskbox
+% (11.9.2026.) - NEMA VISE obruba (boxrule=0pt, colframe=colback) niti
+% odvojenog "boxed title" pecata (trosio dodatni red/razmak). Oznaka
+% "Zadatak #N" sad je obicni podebljani tirkizni tekst UMETNUT na pocetku
+% tijela okvira (vidi \rjesenje nize), u ISTOM retku kao rjesenje/odgovor -
+% cilj je da rjesenja ne zauzimaju puno papira.
+\newtcolorbox{solutionbox}[1][]{
+    enhanced,
+    colback=white,
+    colframe=white,
+    boxrule=0pt,
+    arc=3pt,
+    left=8pt, right=8pt, top=3pt, bottom=3pt,
+    before skip=1mm,
+    after skip=1.5mm,
+    before upper={\raggedright},
+    #1
+}
+
+% --- 6. GRAPHICS, QR CODES & TABLES ---
+\RequirePackage{graphicx}
+\RequirePackage{qrcode}
+\RequirePackage{booktabs}
+\RequirePackage{enumitem}
+
+% Podešavanje popisnih listi za kompaktnost
+\setlist[enumerate]{topsep=2pt, itemsep=2pt, parsep=0pt, partopsep=0pt}
+\setlist[itemize]{topsep=2pt, itemsep=2pt, parsep=0pt, partopsep=0pt}
+
+% --- 6b. HIPERVEZE (hyperref) - DODANO 8.10.2026. ---
+% Jedina svrha: www.cakipoduka.com u podnožju (nize, sekcija 7) postaje
+% klikabilan link kad se PDF gleda digitalno (dijeljenje materijala kao
+% promocija centra - vidi napomenu uz fancyfoot[L] nize). hidelinks = bez
+% obojenih okvira/podcrtavanja oko linkova, u printu nema VIZUALNE razlike
+% od obicnog teksta.
+\RequirePackage{hyperref}
+\hypersetup{hidelinks}
+
+% --- 6c. VIŠE-STUPČANI ISPIS (multicol) - DODANO 8.10.2026. ---
+% Koristi se oko sekcije "Rješenja" u pages/2_test_builder.py (rjesenja_sekcija)
+% da cijeli popis konačnih odgovora stane na JEDNU stranicu u 2 stupca umjesto
+% da se razvuče preko više - rješenja su sad kratka (samo konačan odgovor, vidi
+% \rjesenje nize), pa dobro stanu u uzak stupac.
+\RequirePackage{multicol}
+
+% --- 7. ZAGLAVLJA I PODNOŽJA (Fancyhdr) ---
+\RequirePackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+
+% Linije u zaglavlju/podnožju
+\renewcommand{\headrulewidth}{1pt}
+\renewcommand{\headrule}{\color{MathAccent}\hrule width\headwidth height \headrulewidth \vskip-\headrulewidth}
+\renewcommand{\footrulewidth}{0.4pt}
+\renewcommand{\footrule}{\color{MathBorder}\hrule width\headwidth height \footrulewidth \vskip-\footrulewidth}
+
+% Predmet u zaglavlju (12.10.2026.): Test Builder prije \usepackage{caki-style} definira
+% \cakipredmet (npr. FIZIKA); ako ga nitko nije definirao, ostaje MATEMATIKA kao dosad.
+\providecommand{\cakipredmet}{MATEMATIKA}
+\fancyhead[L]{\small\sffamily\bfseries\color{MathPrimary} \cakipredmet{} \ \textcolor{MathAccent}{$\mathbf{\cdot}$}\ \ ZBIRKA ZADATAKA}
+\fancyhead[R]{\small\sffamily\color{MathAccent}\leftmark}
+% IZMJENA (8.10.2026., na izricit zahtjev, PRIJEDLOG teksta - lako promjenjivo
+% ovdje na jednom mjestu): umjesto interne odrednice "Generirano pomocu...",
+% podnozje sad nosi brend/kontakt centra - cilj je da kad se materijal
+% dijeli dalje (ucenik ucenku), podnozje samo po sebi promovira CAKI centar.
+% Tekst azuriran (8.10.2026., 2. put, na izricit zahtjev - "ima mjesta na
+% footeru") na puniju verziju; OŠ-SŠ-FAX izbaceno jer ga nova recenica vec
+% pokriva (bilo bi dupliciranje).
+\fancyfoot[L]{\tiny\sffamily\color{gray} \href{https://www.cakipoduka.com}{www.cakipoduka.com} \textbullet\ Pripreme za maturu i prijemne ispite u srednje škole \textbullet\ Instrukcije za OŠ, SŠ i fakultet}
+\fancyfoot[R]{\small\sffamily\bfseries\color{MathPrimary} Stranica \thepage}
+
+% --- 8. KOMANDE ZA ZADATKE I VIŠESTRUKI IZBOR ---
+\newcommand{\zadatakHeader}[3]{%
+    \par\addvspace{0.8em}
+    \noindent
+    \begin{tikzpicture}[baseline=(char.base)]
+        \node[fill=MathAccent, text=white, font=\bfseries\sffamily\small, inner sep=4pt, rounded corners=2pt] (char) {#1};
+    \end{tikzpicture}
+    {\sffamily\bfseries\color{MathPrimary} #2} \hfill {\tiny\sffamily\color{gray} [#3]}
+    \par\vspace{0.3em}
+}
+
+% Opcije za višestruki izbor kao PRIRODAN tok teksta (ne fiksna tablica ni
+% fiksan popis) - LaTeX sam odlučuje hoće li sve stati u jedan redak (kompaktno,
+% štedi papir) ili će se prelomiti na više redaka (kad su izrazi dugi). Ovo je
+% robusnije od bilo kojeg fiksnog Python-pravila, jer se stvarna širina teksta
+% zna tek kad LaTeX stvarno složi stranicu - ne unaprijed.
+\newcommand{\mcFourOptions}[4]{%
+    \vspace{3mm}
+    \noindent\textbf{A)}~#1\quad\textbf{B)}~#2\quad\textbf{C)}~#3\quad\textbf{D)}~#4\par
+}
+
+\newcommand{\mcFiveOptions}[5]{%
+    \vspace{3mm}
+    \noindent\textbf{A)}~#1\quad\textbf{B)}~#2\quad\textbf{C)}~#3\quad\textbf{D)}~#4\quad\textbf{E)}~#5\par
+}
+
+% ============================================================
+% 8b. MODERNA BANNER NASLOVNICA — parametrizirana verzija
+%     (ista vizualna ideja kao u priloženom main.tex, samo kao
+%     naredba za ponovnu upotrebu — Matura A/Matura B/druge zbirke)
+% ============================================================
+\newcommand{\cakibanner}[6]{%
+    % #1 nadnaslov (npr. "Zbirka zadataka i ispiti")
+    % #2 glavni naslov (npr. "DRŽAVNA MATURA --- MATEMATIKA")
+    % #3 podnaslov (npr. "Priprema, razina A")
+    % #4 naslov info-boxa (npr. "Priprema za maturu")
+    % #5 opis tekst u info-boxu
+    % #6 URL za QR kod (digitalna/video rješenja, repozitorij i sl.)
+    \thispagestyle{empty}
+    \begin{tikzpicture}[remember picture, overlay]
+        \fill[MathPrimary] (current page.north west) rectangle ([yshift=-4.5cm]current page.north east);
+        \fill[MathAccent] ([yshift=-4.3cm]current page.north west) rectangle ([yshift=-4.5cm]current page.north east);
+        \node[opacity=0.05, color=white] at ([xshift=-3cm, yshift=-2cm]current page.north east) {\fontsize{120}{120}\selectfont $\sum_{i=0}^n x_i$};
+        \node[opacity=0.08, color=white] at ([xshift=4cm, yshift=-2.5cm]current page.north west) {\fontsize{90}{90}\selectfont $\int f(x)dx$};
+    \end{tikzpicture}
+    \vspace*{-0.8cm}
+    \begin{color}{white}
+        \noindent {\Large\sffamily\scshape\bfseries #1} \\[0.3cm]
+        \noindent {\fontsize{26}{30}\sffamily\bfseries #2} \\[0.2cm]
+        \noindent {\small\sffamily\color{MathBorder} #3}
+    \end{color}
+    \vspace{2.2cm}
+    \begin{tcolorbox}[
+        enhanced, colback=white, colframe=MathBorder,
+        boxrule=1pt, arc=5pt, drop fuzzy shadow=gray!20,
+        left=15pt, right=15pt, top=10pt, bottom=10pt
+    ]
+        \begin{minipage}{0.68\linewidth}
+            \sffamily
+            \textcolor{MathPrimary}{\textbf{\Large #4}} \\[0.2cm]
+            \small\color{TextDark} #5
+        \end{minipage}
+        \hfill
+        \begin{minipage}{0.28\linewidth}
+            \centering
+            \qrcode[height=1.8cm]{#6} \\[0.1cm]
+            {\tiny\sffamily\color{gray} Skeniraj za digitalna rješenja}
+        \end{minipage}
+    \end{tcolorbox}
+    \vspace{0.5cm}
+}
+
+% ============================================================
+% 9. SLOJ KOMPATIBILNOSTI s generate_tex.py (CSV -> LaTeX skripta)
+%    generate_tex.py generira \cjelinaslov{..}, \zadatak{tekst}{video_url}
+%    i \rjesenje{broj}{tekst}{odgovor} — ove naredbe MORAJU postojati
+%    ovdje, jer generirani sadržaj ne zna ništa o taskbox/solutionbox
+%    dizajnu. Ako se dizajn zadatka mijenja, mijenja se SAMO ovdje.
+% ============================================================
+\RequirePackage{etoolbox}
+\newcounter{cakizadatak}
+
+% Naslov cjeline unutar popisa zadataka
+\newcommand{\cjelinaslov}[1]{%
+    \par\addvspace{1.2em}
+    {\color{MathPrimary}\sffamily\bfseries\Large #1}\par
+    \vspace{2mm}\hrule height 1pt \color{MathAccent}
+    \vspace{3mm}
+}
+
+% \zadatak{tekst}{video_url ili prazno} — broj se generira automatski
+% (globalni brojač), koristi taskbox dizajn; QR kod prikazan samo
+% ako je video_url zadan. Oznaka "Zadatak N" je od 11.9.2026. podebljan
+% plavi tekst UMETNUT na početku tijela okvira (isti redak kao tekst
+% zadatka), ne poseban naslovni pečat - vidi napomenu uz taskbox gore.
+\newcommand{\zadatak}[2]{%
+    \stepcounter{cakizadatak}%
+    \begin{taskbox}
+        {\bfseries\sffamily\color{MathAccent}Zadatak \thecakizadatak}~%
+        \ifblank{#2}{%
+            #1%
+        }{%
+            \begin{minipage}[t]{0.76\linewidth}
+                #1
+            \end{minipage}%
+            \hfill
+            \begin{minipage}[t]{0.18\linewidth}
+                \centering
+                \qrcode[height=1.5cm]{#2}\\[1mm]
+                {\tiny\sffamily\color{gray} video rješenje}
+            \end{minipage}%
+        }%
+    \end{taskbox}
+}
+
+% \rjesenje{broj}{tekst}{konačan odgovor ili prazno} — koristi se u
+% odjeljku "Rješenja" na kraju cijele skripte; broj MORA odgovarati
+% brojevima dodijeljenim u \zadatak (generate_tex.py ih generira
+% istim redoslijedom, pa se uvijek poklapaju).
+\newcommand{\rjesenje}[3]{%
+    % IZMJENA v2 (8.10.2026., na izricit zahtjev): rjesenja sad prikazuju SAMO
+    % konacan odgovor (#3) - puni postupak (#2) namjerno se VISE NE ispisuje
+    % ovdje (ide u PreTeXt/druge materijale) - #2 se i dalje prima kao
+    % argument (kompatibilnost poziva), ali se ignorira. Bez oznake "Konacan
+    % odgovor:" kod svakog retka (visak teksta/papira) - samo "Zadatak N:
+    % <odgovor>". solutionbox (okvir) vise se ovdje NE koristi - obican
+    % kompaktan redak, zamisljen za \begin{multicols}{2} (vidi rjesenja_sekcija
+    % u 2_test_builder.py) da cijela sekcija stane na jednu stranicu.
+    \noindent{\bfseries\sffamily\color{MathSecondary}Zadatak \##1:}~%
+    \ifblank{#3}{\textit{\color{gray}(odgovor nije unesen)}}{#3}%
+    \par\vspace{1mm}
+}
+
+% ============================================================
+% 10. TEST BUILDER — jednostavno zaglavlje + zadatak s bodovima
+%     (koristi Streamlit "Test Builder" alat; profesor unosi
+%     naslov/datum/bodove, redoslijed slaže sam)
+% ============================================================
+
+% \cakiispihead{naslov}{datum}{tip dokumenta}{ukupno bodova ili prazno}
+%              {redovi po kategoriji - već formatiran LaTeX blok ili prazno}
+% Jednostavno, brzo zaglavlje (bez velikog bannera) — prikladno za
+% testove/radne listiće koji se generiraju ad hoc, često i bez branda.
+% #5 (kategorije): ako profesor u Test Builderu dodijeli bodove po
+% kategorijama vrednovanja (UZV/RP/MK), zaglavlje umjesto JEDNOG retka
+% "Ukupno bodova/Ostvareno/Ocjena" (#4) prikazuje PO JEDAN redak za
+% SVAKU kategoriju koja se stvarno koristi u testu, svaki sa svojim
+% "Ostvareno"/"Ocjena" - test se tada ocjenjuje po kategoriji, ne
+% jednom cjelokupnom ocjenom. Ako #5 prazno (nijedan zadatak nema
+% dodijeljenu kategoriju), zaglavlje se ponaša kao prije (#4).
+\newcommand{\cakiispithead}[5]{%
+    \thispagestyle{empty}
+    % DODANO (8.10.2026., 2. put, na izricit zahtjev): mali "letterhead" redak
+    % iznad naslova - naziv tvrtke + web + kontakt, desno poravnat. Namjerno
+    % SAMO na pocetnoj stranici testa (ne u fancyhead koji se ponavlja na
+    % svakoj sljedecoj stranici - ondje vec postoji naslov+datum, a footer na
+    % SVAKOJ stranici vec nosi web/brend, vidi fancyfoot[L] gore - dupliciranje
+    % kontakta na svakoj stranici zaglavlja nije trazeno).
+    \begin{flushright}
+        {\tiny\sffamily\color{gray} Caki centar d.o.o. \textbullet\ \href{https://www.cakipoduka.com}{www.cakipoduka.com} \textbullet\ kontakt: 095 9005611}
+    \end{flushright}
+    \vspace{1mm}
+    % IZMJENA (8.10.2026., na izricit zahtjev): naslov centriran, s tipom
+    % dokumenta i datumom odmah pored njega u istom centriranom retku
+    % (prije: naslov lijevo poravnat, tip+datum u zasebnom retku ispod).
+    \begin{center}
+        {\color{MathPrimary}\sffamily\bfseries\Large #1}\quad
+        {\small\sffamily\color{TextDark} #3\ \textbullet\ #2}
+    \end{center}
+    \vspace{3mm}
+    \noindent\textbf{Ime i prezime:} \makebox[5.5cm]{\hrulefill} \quad
+    \textbf{Razred:} \makebox[2.5cm]{\hrulefill}
+    \ifblank{#5}{%
+        \ifblank{#4}{}{%
+            \par\vspace{2mm}
+            \noindent\textbf{Ukupno bodova:} #4 \quad
+            \textbf{Ostvareno:} \makebox[2cm]{\hrulefill} \quad
+            \textbf{Ocjena:} \makebox[2cm]{\hrulefill}
+        }%
+    }{%
+        #5%
+    }%
+    \par\vspace{2mm}\hrule height 1pt \color{MathAccent}
+    \vspace{3mm}
+    % Isto zaglavlje (naslov + datum) ponavlja se i na sljedećim str.
+    \fancyhead[L]{\small\sffamily\bfseries\color{MathPrimary} #1}
+    \fancyhead[R]{\small\sffamily\color{MathAccent} #2}
+}
+
+% \cakislike{lista} - jedna ili VIŠE slika uz zadatak (13.10.2026.). Lista je popis putanja odvojen
+% ZAREZOM (npr. "images/a.png,images/b.png" za "slika 1." i "slika 2."). Jedna slika izgleda točno kao
+% prije (55% širine); dvije stoje jedna uz drugu (po 46%); tri i više po 30% (prelamaju se u redove).
+\newcounter{cakislikan}
+\newcommand{\cakislikabroji}[1]{\stepcounter{cakislikan}}
+\newcommand{\cakislikaukljuci}[1]{\includegraphics[width=\cakisirinaslike\linewidth]{#1}\hspace{0.02\linewidth}}
+\newcommand{\cakislike}[1]{%
+    \setcounter{cakislikan}{0}%
+    \forcsvlist{\cakislikabroji}{#1}%
+    \ifnum\value{cakislikan}=1 \def\cakisirinaslike{0.55}\else
+    \ifnum\value{cakislikan}=2 \def\cakisirinaslike{0.46}\else
+    \def\cakisirinaslike{0.30}\fi\fi
+    \forcsvlist{\cakislikaukljuci}{#1}%
+}
+
+% \zadatakbod{tekst}{video_url ili prazno}{bodovi ili prazno}{slika (relativna
+% putanja unutar kompajlacijskog foldera) ili prazno}{tip_zadatka ili prazno}
+% {kategorije vrednovanja - već formatiran LaTeX tekst ili prazno}
+% Isto kao \zadatak, ali s brojem bodova u naslovu okvira ako je zadan
+% (npr. "Zadatak 3 (5 bod.)"), opcionalnom slikom ispod teksta zadatka
+% (za zadatke gdje je slika_zadana=da u bazi), opcionalnom malom oznakom
+% kategorija vrednovanja (UZV/RP/MK - zadatak može nositi bodove u više
+% kategorija odjednom, npr. "RP: 1 bod.  MK: 2 bod.") i - SAMO za
+% tip_zadatka="kratki_odgovor" - kratkom crtom za upis konačnog odgovora
+% (višestruki izbor odgovara zaokruživanjem ponuđene opcije, ne treba
+% dodatnu crtu; prošireni odgovor/puni postupak piše se na odvojenom
+% listu za koncept, ne u ovaj PDF). Koristi se u Test Builder izlazu.
+\newcommand{\zadatakbod}[6]{%
+    \stepcounter{cakizadatak}%
+    \def\cakiTitle{Zadatak \thecakizadatak}%
+    \ifblank{#3}{}{\edef\cakiTitle{Zadatak \thecakizadatak\space (#3\space bod.)}}%
+    \begin{taskbox}
+        \ifblank{#6}{}{%
+            \noindent{\scriptsize\sffamily\bfseries\color{MathSecondary} #6}\par\vspace{1mm}%
+        }%
+        {\bfseries\sffamily\color{MathAccent}\cakiTitle}~%
+        \ifblank{#2}{%
+            #1%
+        }{%
+            \begin{minipage}[t]{0.76\linewidth}
+                #1
+            \end{minipage}%
+            \hfill
+            \begin{minipage}[t]{0.18\linewidth}
+                \centering
+                \qrcode[height=1.5cm]{#2}\\[1mm]
+                {\tiny\sffamily\color{gray} video rješenje}
+            \end{minipage}%
+        }%
+        \ifblank{#4}{}{%
+            \par\vspace{2mm}
+            \centering
+            \cakislike{#4}%
+            \par
+        }%
+        \ifstrequal{#5}{kratki_odgovor}{%
+            \par\vspace{1.5mm}
+            \noindent{\small\bfseries Odgovor:}~\makebox[4.5cm]{\hrulefill}%
+        }{}%
+    \end{taskbox}
+}
+
+% \krajtesta{tekst} — jednostavan marker kraja popisa zadataka (npr.
+% "KRAJ TESTA"), ništa više - ne dodaje prostor za postupak (učenici
+% imaju odvojen list za koncept/računanje, to nije dio ovog PDF-a).
+% Poziva se iz main_test_template.tex odmah nakon zadnjeg zadatka,
+% prije (opcionalne) sekcije rješenja.
+\newcommand{\krajtesta}[1]{%
+    \par\vspace{3mm}
+    \begin{center}
+        {\sffamily\bfseries\large\color{MathPrimary} #1}
+    \end{center}
+}

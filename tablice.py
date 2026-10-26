@@ -19,6 +19,8 @@ TAB_POKUSAJI = "Pokusaji"
 TAB_OCJENE = "Ocjene_zadataka"
 TAB_STATISTIKA = "Statistika_zadataka"
 TAB_DNEVNIK = "Dnevnik_radnji"
+TAB_RADOVI = "Radovi"
+TAB_POSJETE = "Posjete"
 
 # ------------------------------------------------------------------ sigurnosni prekidač
 # ŽIVA BAZA. Dok je `PISANJE` False, NIŠTA se ne upisuje (sve funkcije pisanja bacaju grešku).
@@ -63,6 +65,13 @@ ZAGLAVLJA = {
     TAB_STATISTIKA: [
         "zadatak_id", "definicija_id", "n", "p_vrijednost", "diskriminativnost",
         "distraktori_json", "prosj_vrijeme_s", "izracunato",
+    ],
+    TAB_RADOVI: [
+        "rad_id", "pokusaj_id", "ucenik_id", "naziv", "veza", "izvor",
+        "velicina_bajtova", "prilozio", "prilozeno", "potvrdjeno", "napomena",
+    ],
+    TAB_POSJETE: [
+        "posjeta_id", "ucenik_id", "kad", "radnja", "detalj", "naprava",
     ],
     TAB_DNEVNIK: ["kad", "korisnik", "radnja", "sto", "detalj"],
 }

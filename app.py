@@ -472,6 +472,26 @@ with tab_rezultati:
                 st.warning("**Nije predalo:** " + ", ".join(nisu[:20])
                            + (" …" if len(nisu) > 20 else ""))
 
+            # --- 👀 prati li učenik portal
+            with st.expander("👀 Praćenje pristupa (koliko puta je učenik otvorio portal)"):
+                try:
+                    _pracenje = posjete.sazetak(_sheet())
+                except Exception as e:              # noqa: BLE001
+                    _pracenje = {}
+                    st.caption(f"Praćenje nije dostupno: {e}")
+                if not _pracenje:
+                    st.caption("Još nema zabilježenih posjeta. Bilježi se od prvog ulaska učenika "
+                               "u portal (jednom po sesiji, da se ne troši Google kvota).")
+                else:
+                    st.dataframe([{
+                        "Šifra": r["ucenik_id"],
+                        "Posjeta": r["posjeta"],
+                        "Testova otvoreno": r["testova"],
+                        "Radova": r["radova"],
+                        "Zadnji put": model.tekst(r["zadnji"])[:16],
+                    } for r in sorted(_pracenje.values(), key=lambda x: x["zadnji"], reverse=True)],
+                        hide_index=True, width="stretch")
+
             # --- izvoz za Excel (profesor zna raditi s tablicom)
             import csv
             import io
@@ -502,6 +522,41 @@ with tab_rezultati:
                 bodovi = model.broj(p.get("bodovi"))
                 maks = model.broj(p.get("bodovi_max"))
                 with st.expander(f"{ime} — {bodovi:g}/{maks:g} bodova"):
+                    # 📷 papirnati dio: priloženi skenovi i poveznice
+                    _pid = model.tekst(p.get("pokusaj_id"))
+                    try:
+                        _radovi = radovi.za_pokusaj(_sheet(), _pid)
+                    except Exception:               # noqa: BLE001
+                        _radovi = []
+                    st.caption("📷 Papirnati dio: " + radovi.stanje(_radovi))
+                    for _r in _radovi:
+                        if model.tekst(_r.get("veza")):
+                            st.markdown(f"· [{model.tekst(_r.get('naziv'))}]({model.tekst(_r.get('veza'))}) "
+                                        + ("✅ pregledano" if model.tekst(_r.get("potvrdjeno"))
+                                           else "⏳ čeka pregled"))
+                            if not model.tekst(_r.get("potvrdjeno")):
+                                if st.button("✅ Potvrdi pregled", key=f"v2_rad_{_r.get('rad_id')}"):
+                                    try:
+                                        radovi.potvrdi(_sheet(), _r.get("rad_id"))
+                                        st.success("Pregled potvrđen.")
+                                        _osvjezi()
+                                    except Exception as e:   # noqa: BLE001
+                                        st.error(f"Nije uspjelo: {e}")
+                    with st.form(f"v2_rad_form_{_pid}"):
+                        _veza = st.text_input("Poveznica na sken (Drive, mobitel…)",
+                                              key=f"v2_rad_veza_{_pid}")
+                        _naziv = st.text_input("Naziv", value="Skenirani rad",
+                                              key=f"v2_rad_naziv_{_pid}")
+                        if st.form_submit_button("📎 Priloži rad") and model.tekst(_veza):
+                            try:
+                                radovi.dodaj_vezu(_sheet(), pokusaj_id=_pid,
+                                                  ucenik_id=model.tekst(x.get("ucenik_id")),
+                                                  veza=_veza, naziv=_naziv)
+                                st.success("Rad priložen.")
+                                _osvjezi()
+                            except Exception as e:       # noqa: BLE001
+                                st.error(f"Nije uspjelo: {e}")
+
                     odg = provedba.odgovori(p)
                     ekran_ucenika.prikazi_pregled_rjesenja(
                         st, zadaci_r, odg,

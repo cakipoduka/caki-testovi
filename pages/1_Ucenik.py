@@ -21,8 +21,11 @@ import streamlit as st
 import definicije
 import dodjele
 import ekran_ucenika
+import drive
 import model
+import posjete
 import provedba
+import radovi
 from veza import sheet_crm
 
 st.set_page_config(page_title="CAKI — Testovi", page_icon="📝", layout="centered")
@@ -84,6 +87,45 @@ def _kartica(dodjela: dict, definicija: dict, pokusaj) -> None:
         st.caption(f"Rok: **{model.datum_hr(rok['od']) or '—'}** – "
                    f"**{model.datum_hr(rok['do']) or '—'}**")
 
+        # 📷 učenik sam prilaže fotografiju/sken papirnog rada (doma, mobitelom)
+        with st.expander("📷 Priloži svoj rad (fotografija ili sken)"):
+            _pid = ""
+            _svi = provedba.pokusaji_ucenika(st.session_state["_v2u_sheet"], kljuc) \
+                if hasattr(provedba, "pokusaji_ucenika") else []
+            if _svi:
+                _pid = model.tekst(_svi[-1].get("pokusaj_id"))
+            if not _pid:
+                st.caption("Rad možeš priložiti kad test počne. Fotografiraj papir i pošalji ovdje.")
+            else:
+                _postojeci = radovi.za_pokusaj(st.session_state["_v2u_sheet"], _pid)
+                if _postojeci:
+                    st.caption("Već priloženo: " + radovi.stanje(_postojeci))
+                _datoteka = st.file_uploader("Odaberi fotografiju ili PDF", type=["png", "jpg", "jpeg", "pdf"],
+                                             key=f"v2u_rad_{kljuc}")
+                _link = st.text_input("…ili zalijepi poveznicu (npr. s mobitela)",
+                                      key=f"v2u_rad_link_{kljuc}")
+                if st.button("📤 Pošalji rad", key=f"v2u_rad_salji_{kljuc}"):
+                    try:
+                        _veza = ""
+                        if _datoteka is not None:
+                            _bajtovi = _datoteka.getvalue()
+                            _folder = drive.folder_id(st.secrets)
+                            _veza, _greska = drive.ucitaj(_bajtovi, radovi.sef_datoteke(_datoteka.name),
+                                                          folder=_folder)
+                            if _greska:
+                                st.warning(_greska + " Pošalji kao poveznicu ispod.")
+                        radovi.dodaj_ucenikov_rad(
+                            st.session_state["_v2u_sheet"], pokusaj_id=_pid, ucenik_id=sifra,
+                            veza=_veza or model.tekst(_link),
+                            sadrzaj=(_datoteka.getvalue() if (_datoteka and not _veza) else None),
+                            naziv=(_datoteka.name if _datoteka else "Poveznica"))
+                        posjete.zabiljezi(st.session_state["_v2u_sheet"], ucenik_id=sifra,
+                                          radnja="rad", detalj=kljuc)
+                        st.success("Rad je poslan profesoru. ✅")
+                        st.rerun()
+                    except Exception as e:              # noqa: BLE001
+                        st.error(f"Rad nije poslan: {e}")
+
         if pokusaj and model.tekst(pokusaj.get("status")) == provedba.STATUS_PREDANO:
             bod = model.broj(pokusaj.get("bodovi"))
             maks = model.broj(pokusaj.get("bodovi_max"))
@@ -111,6 +153,14 @@ def main() -> None:
         return
     st.session_state["_v2u_sheet"] = sheet
 
+    # 👀 zabilježi posjetu — JEDNOM po sesiji (štiti Google kvotu od 60 upisa/min)
+    try:
+        naprava = posjete.naprava_iz_upita(
+            st.context.headers.get("User-Agent", "") if hasattr(st, "context") else "")
+        posjete.biljeska_jednom(st, sheet, ucenik_id=sifra, radnja="posjeta", naprava=naprava)
+    except Exception:                                   # noqa: BLE001 — praćenje ne blokira
+        pass
+
     lijevo, desno = st.columns([3, 1])
     lijevo.markdown(f"### 📝 Moji testovi · **{sifra}**")
     if desno.button("Odjava", key="v2u_odjava"):
@@ -133,6 +183,11 @@ def main() -> None:
             if st.button("← Natrag na popis", key="v2u_natrag"):
                 st.session_state.pop("v2u_aktivni", None)
                 st.rerun()
+            try:
+                posjete.biljeska_jednom(st, sheet, ucenik_id=sifra, radnja="test",
+                                        detalj=model.tekst(definicija.get("definicija_id")))
+            except Exception:                           # noqa: BLE001
+                pass
             ekran_ucenika.prikazi(st, sheet, definicija, odabrana, dry=False)
             return
         st.session_state.pop("v2u_aktivni", None)

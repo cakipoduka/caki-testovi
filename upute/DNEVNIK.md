@@ -4,6 +4,8 @@ Jedna linija po isporuci. Detalji su u odgovarajućem `UPDATE_*.md`.
 
 | Datum | Faza / tema | Što je ušlo | Testovi | Izvještaj |
 |---|---|---|---|---|
+| 26.10.2026. | **Ispravak: učenik prilaže rad + 👀 praćenje** | `drive` (upload u Drive s fallbackom na poveznicu) · `posjete` (posjeta/test/rad, jednom po sesiji) · 📷 prilog u stranici učenika · 👀 tablica u Rezultatima · tabovi `Radovi`, `Posjete` | **112** (15 novih) | `UPDATE_26-10_ucenik_rad_pracenje.md` |
+| 26.10.2026. | **Faza D (1. dio) — radovi na papiru** | `radovi` (poveznica ili upload, potvrda pregleda, sigurno ime datoteke) · novi tab `Radovi` · prilaganje u 📊 Rezultatima | **97** (8 novih) | `UPDATE_26-10_fazaD_radovi.md` |
 | 25.10.2026. | **Faza C (dopuna) — po cjelinama + CSV** | `analitika.po_cjelinama`, `najslabija_cjelina` u sažetku · tablica cjelina u 📈 Kvaliteti · **CSV izvoz** rezultata za Excel | **89** (4 nova) | `UPDATE_25-10_fazaC_kvaliteta_i_portal.md` §7 |
 | 25.10.2026. | **Faza C (1. dio) — kvaliteta zadataka + stranica učenika** | `analitika` (p, r, distraktori, Cronbach α, preporuke, zaštita malog uzorka) · kartica **📈 Kvaliteta** · `pages/1_Ucenik.py` (prijava šifrom, popis, rješavanje, pregled po Student View-u) | **85** (18 novih) | `UPDATE_25-10_fazaC_kvaliteta_i_portal.md` |
 | 25.10.2026. | **Faza B (2. dio) — slike, 💡 pomoć, 🎬 video** | `slike_zadataka` (Drive, tolerantan ključ) · `ai_pomoc` (bot ne daje rješenje, max 3 pitanja, odgovor ne ulazi u upit) · slika i 💡 uz zadatak · pregled rješenja po učeniku u Rezultatima | **67** (17 novih) | `UPDATE_25-10_fazaB_slike_ai_video.md` |

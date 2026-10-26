@@ -38,6 +38,9 @@
 | `ai_pomoc.py` | 💡 pomoć: pravila „bez rješenja", max 3 pitanja, DeepSeek/Anthropic | `model` |
 | `analitika.py` | mjerenje kvalitete: p, diskriminativnost, distraktori, Cronbach α, preporuke | `model` |
 | `pages/1_Ucenik.py` | **stranica učenika**: prijava šifrom, popis testova, rješavanje, pregled | svi |
+| `radovi.py` | 📷 radovi na papiru: prilog učenika ili profesora, potvrda pregleda (tab `Radovi`) | `model`, `tablice` |
+| `drive.py` | upload skena u Drive (25 MB limit, fallback na poveznicu) | `google-api-python-client` |
+| `posjete.py` | 👀 praćenje pristupa: posjeta/test/rad, **jednom po sesiji** (kvota) | `model`, `tablice` |
 
 ## 3. Model podataka
 

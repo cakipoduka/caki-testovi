@@ -267,99 +267,90 @@ tab_testovi, tab_pdf, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ocjene, tab_
 
 with tab_testovi:
     upute.prikazi(st, "testovi")
+    st.caption("Popis testova i radnje. **Novi test slažeš u 🧱 Složi test.**")
 
-    # Ako je spojena kopija/backup baze — reci ODMAH, prije bilo kakvog rada.
-    _upoz_baza = ""
-    try:
-        _upoz_baza = _je_kopija(getattr(_baza(), "title", ""))
-    except Exception:                                   # noqa: BLE001
-        _upoz_baza = ""
-    if _upoz_baza:
-        st.error(_upoz_baza)
-
-    testovi = _testovi()
-    if not testovi:
-        st.info("Još nema testova. Slijedi korake niže — prvi test se pravi iz baze zadataka.")
+    _testovi_lista = _testovi()
+    if not _testovi_lista:
+        st.info("Još nema testova → **🧱 Složi test** (odaberi zadatke → Spremi kao online test).")
     else:
         st.dataframe([{
-            "ID": model.tekst(t.get("definicija_id")),
-            "Naziv": model.tekst(t.get("naziv")),
-            "Status": model.tekst(t.get("status")),
-            "Zadataka": t.get("broj_zadataka"),
-            "Bodova": t.get("bodovi_ukupno"),
-            "Rok": f"{model.datum_hr(t.get('rok_od'))} – {model.datum_hr(t.get('rok_do'))}",
-            "Vrsta": definicije.VRSTA_NAZIV.get(model.tekst(t.get("vrsta")), ""),
-        } for t in testovi], hide_index=True, width="stretch")
+            "ID": model.tekst(x.get("definicija_id")),
+            "Naziv": model.tekst(x.get("naziv")),
+            "Status": model.tekst(x.get("status")),
+            "Zadataka": model.broj(x.get("broj_zadataka")),
+            "Bodova": model.broj(x.get("bodovi_ukupno")),
+            "Rok": f"{model.datum_hr(x.get('rok_od')) or '—'} – {model.datum_hr(x.get('rok_do')) or '—'}",
+            "Vrsta": definicije.VRSTA_NAZIV.get(model.tekst(x.get("vrsta")), ""),
+        } for x in _testovi_lista], hide_index=True, width="stretch")
 
-    st.divider()
-    st.subheader("➕ Novi test iz baze")
+        st.divider()
+        _opcije_l = {model.tekst(x.get("definicija_id")): x for x in _testovi_lista}
+        _odabir_l = st.selectbox("Odaberi test za radnje", list(_opcije_l),
+                                 format_func=lambda i: f"{model.tekst(_opcije_l[i].get('naziv'))} · "
+                                                       f"{model.tekst(_opcije_l[i].get('status'))}",
+                                 key="v2_l_test")
+        _d_l = _opcije_l[_odabir_l]
+        _smije_l, _razlog_l = definicije.smije_urediti(_sheet(), _d_l)
+        _status_l = model.tekst(_d_l.get("status"))
 
-    zadaci_svi = _zadaci()
-    if not zadaci_svi:
-        # `st.stop()` OVDJE NE SMIJE — zaustavio bi cijelu stranicu (i Postavke bi bile prazne).
-        st.warning("Baza se ne može pročitati ili je prazna → **⚙️ Postavke → 🩺 Provjera baze**.")
+        c1, c2, c3 = st.columns(3)
+        # --- pauza / puštanje
+        if _status_l == "objavljen":
+            if c1.button("⏸️ Učini nedostupnim učenicima", key="v2_l_pauza",
+                         help="Test prelazi u „zatvoren” — učenici ga ne mogu otvoriti ni predati."):
+                try:
+                    definicije.promijeni_status(_sheet(), _odabir_l, "zatvoren", korisnik="caki")
+                    st.success("Test je nedostupan učenicima. Sada ga možeš urediti.")
+                    _osvjezi()
+                except Exception as e:                  # noqa: BLE001
+                    st.error(f"Nije uspjelo: {e}")
+        elif _status_l == "zatvoren":
+            if c1.button("▶️ Ponovno pusti učenicima", key="v2_l_pusti",
+                         help="Vraća test u „objavljen” — učenici ga opet vide."):
+                try:
+                    definicije.promijeni_status(_sheet(), _odabir_l, "objavljen", korisnik="caki")
+                    st.success("Test je ponovno dostupan učenicima.")
+                    _osvjezi()
+                except Exception as e:                  # noqa: BLE001
+                    st.error(f"Nije uspjelo: {e}")
+        else:
+            c1.caption(f"Status: **{_status_l}**")
 
-    c1, c2, c3, c4 = st.columns(4)
-    f_tekst = c1.text_input("Traži u tekstu / ID-u", key="v2_f_tekst")
-    f_cjelina = c2.selectbox("Cjelina", [""] + banka.vrijednosti(zadaci_svi, "cjelina"), key="v2_f_cj")
-    f_tezina = c3.selectbox("Težina", [""] + banka.vrijednosti(zadaci_svi, "tezina"), key="v2_f_tez")
-    f_tip = c4.selectbox("Tip", ["", "kratki_odgovor", "visestruki_izbor"], key="v2_f_tip")
+        c2.caption("✏️ " + ("mijenjanje dopušteno — " + _razlog_l if _smije_l else _razlog_l))
+        if c3.button("📊 Vidi rezultate", key="v2_l_rez"):
+            st.session_state["v2_rez_test"] = _odabir_l
+            st.caption("Rezultati su u kartici 📊 Rezultati (test je tamo već odabran).")
 
-    pronadeni = banka.filtriraj(zadaci_svi, tekst=f_tekst, cjelina=f_cjelina,
-                                tezina=f_tezina, tip=f_tip)
-    st.caption(f"U bazi **{len(zadaci_svi)}** zadataka · filtar pronašao **{len(pronadeni)}** "
-               f"· s videom: **{sum(1 for z in pronadeni if model.tekst(z.get('video_url')))}**")
+        # --- uređivanje
+        if _smije_l:
+            with st.expander("✏️ Uredi test (naziv, trajanje, rokovi, napomena)"):
+                with st.form(f"v2_uredi_{_odabir_l}"):
+                    u1, u2 = st.columns(2)
+                    _n_naziv = u1.text_input("Naziv", value=model.tekst(_d_l.get("naziv")))
+                    _n_nap = u2.text_input("Napomena", value=model.tekst(_d_l.get("napomena")))
+                    u3, u4, u5 = st.columns(3)
+                    _n_traj = u3.number_input("Trajanje (min)", 5, 240,
+                                              model.cijeli(_d_l.get("trajanje_min"), 45), 5)
+                    _n_od = u4.date_input("Rok od",
+                                          value=model.datum(_d_l.get("rok_od")) or model.sada().date())
+                    _n_do = u5.date_input("Rok do",
+                                          value=model.datum(_d_l.get("rok_do")) or model.sada().date())
+                    if st.form_submit_button("💾 Spremi izmjene", type="primary"):
+                        try:
+                            if _n_do < _n_od:
+                                st.error("Rok „do” ne može biti prije roka „od”.")
+                            else:
+                                definicije.izmijeni(_sheet(), _d_l, {
+                                    "naziv": _n_naziv, "napomena": _n_nap,
+                                    "trajanje_min": int(_n_traj),
+                                    "rok_od": model.iso_datum(_n_od),
+                                    "rok_do": model.iso_datum(_n_do),
+                                }, korisnik="caki")
+                                st.success("Izmjene spremljene.")
+                                _osvjezi()
+                        except Exception as e:          # noqa: BLE001
+                            st.error(f"Nije spremljeno: {e}")
 
-    prikaz = pronadeni[:200]
-    opcije = {model.tekst(z.get("id")): z for z in prikaz}
-    odabrani_id = st.multiselect(
-        "Odaberi zadatke (redoslijed = redoslijed u testu)", list(opcije),
-        format_func=lambda i: f"{i} · {model.tekst(opcije[i].get('tekst'))[:70]}",
-        key="v2_odabrani")
-    if len(pronadeni) > len(prikaz):
-        st.caption(f"Prikazano prvih {len(prikaz)} — preciziraj filtar da dođeš do ostalih.")
-
-    odabrani = [opcije[i] for i in odabrani_id]
-    if odabrani:
-        st.caption(f"Odabrano **{len(odabrani)}** zadataka · **{definicije.bodovi_ukupno(odabrani):g}** bodova")
-
-    with st.form("v2_novi_test"):
-        g1, g2, g3 = st.columns(3)
-        naziv = g1.text_input("Naziv testa", placeholder="npr. Matura — linearna funkcija")
-        predmet = g2.text_input("Predmet", value="matematika")
-        vrsta = g3.selectbox("Vrsta", definicije.VRSTE,
-                             format_func=lambda v: definicije.VRSTA_NAZIV.get(v, v))
-        h1, h2, h3 = st.columns(3)
-        trajanje = h1.number_input("Trajanje (min)", 5, 240, 45, 5)
-        rok_od = h2.date_input("Rok od")
-        rok_do = h3.date_input("Rok do")
-        napomena = st.text_area("Napomena za sebe", height=70)
-        posalji = st.form_submit_button("💾 Spremi kao nacrt", type="primary",
-                                        disabled=not odabrani)
-
-    if posalji:
-        try:
-            novi_id = tablice.novi_id([model.tekst(t.get("definicija_id")) for t in _testovi()], "T26-")
-            d = definicije.nova_definicija(
-                definicija_id=novi_id, naziv=naziv, predmet=predmet, zadaci_=odabrani,
-                trajanje_min=int(trajanje), rok_od=model.iso_datum(rok_od),
-                rok_do=model.iso_datum(rok_do), vrsta=vrsta, autor="caki",
-                napomena=napomena, status="nacrt")
-            greske = definicije.validiraj(d)
-            if greske:
-                for g in greske:
-                    st.error(g)
-            else:
-                tablice.dodaj(_sheet(), tablice.TAB_DEFINICIJE, [d])
-                tablice.zapisi_radnju(_sheet(), "caki", "novi_test", novi_id, naziv)
-                st.success(f"Spremljeno kao **nacrt** `{novi_id}` — nitko ga još ne vidi. "
-                           f"Objavi ga u kartici 👥 Objavi.")
-                _osvjezi()
-        except Exception as e:                          # noqa: BLE001
-            st.error(f"Nije uspjelo: {e}")
-
-
-# ------------------------------------------------------------------ 👥 Objavi
 
 with tab_pdf:
     upute.prikazi(st, "pdf")
@@ -522,8 +513,17 @@ with tab_pdf:
                 _trajanje = o2.number_input("Trajanje (min)", 5, 240, 45, 5, key="v2p_trajanje")
                 _vrsta = o3.selectbox("Vrsta", definicije.VRSTE, key="v2p_vrsta",
                                       format_func=lambda v: definicije.VRSTA_NAZIV.get(v, v))
+                _d1, _d2 = st.columns(2)
+                _rok_od = _d1.date_input("Rok od (test nije dostupan prije)", key="v2p_rok_od")
+                _rok_do = _d2.date_input("Rok do (test nije dostupan poslije)", key="v2p_rok_do")
+                if _rok_do < _rok_od:
+                    st.error("Rok „do” ne može biti prije roka „od”.")
+                else:
+                    st.caption(f"Učenik može pisati **{model.datum_hr(_rok_od)}** – "
+                               f"**{model.datum_hr(_rok_do)}**; izvan toga test nije dostupan.")
                 if st.button("💾 Spremi kao online test (nacrt)", type="primary",
-                             disabled=bool(_greska_naslov) or not _lista, key="v2p_spremi"):
+                             disabled=(bool(_greska_naslov) or not _lista or _rok_do < _rok_od),
+                             key="v2p_spremi"):
                     try:
                         _novi_id = tablice.novi_id(
                             [model.tekst(x.get("definicija_id")) for x in _testovi()], "T26-")
@@ -531,7 +531,7 @@ with tab_pdf:
                             definicija_id=_novi_id, naziv=_naslov, predmet=_predmet,
                             zadaci_=_lista, trajanje_min=int(_trajanje), vrsta=_vrsta,
                             autor="caki", status="nacrt",
-                            rok_od=model.iso_datum(model.datum(_datum) or model.sada().date()))
+                            rok_od=model.iso_datum(_rok_od), rok_do=model.iso_datum(_rok_do))
                         _greske = definicije.validiraj(_d)
                         if _greske:
                             for _g in _greske:

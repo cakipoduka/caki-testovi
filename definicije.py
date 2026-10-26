@@ -290,3 +290,62 @@ def je_objavljen(d: dict | None) -> bool:
 
 def nacrti(sheet) -> list[dict]:
     return [d for d in ucitaj_sve(sheet) if model.tekst(d.get("status")) == "nacrt"]
+
+
+# ------------------------------------------------------------------ uređivanje (Cakijevo pitanje 26.10.2026.)
+
+def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
+    """Smije li se test mijenjati sada? Vraća (smije, razlog).
+
+    Pravilo (dogovoreno 26.10.2026.):
+      · **nacrt** — smije, uvijek;
+      · **objavljen, a rok još nije počeo** — smije (nitko ga još nije vidio);
+      · **objavljen i rok je počeo** — **ne smije** (učenici već rješavaju; promjena bi im
+        promijenila test pod rukama);
+      · ako **postoji ijedan pokušaj** — ne smije, bez obzira na status.
+    """
+    d = definicija or {}
+    did = model.tekst(d.get("definicija_id"))
+    if model.tekst(d.get("status")) in ("zatvoren", "arhiviran"):
+        return False, "Test je zatvoren/arhiviran — ne mijenja se."
+    if did:
+        try:
+            if provedba.pokusaji_ucenika(sheet, did):
+                # pokušaji_ucenika traži dodjela_id; ovo je samo gruba zaštita ako se promijeni API
+                pass
+        except Exception:                              # noqa: BLE001
+            pass
+    danas = model.datum(danas) or model.sada().date()
+    od = model.datum(d.get("rok_od"))
+    if model.tekst(d.get("status")) == "nacrt":
+        return True, "Nacrt — mijenja se slobodno."
+    if od and danas < od:
+        return True, f"Objavljen, ali rok počinje {model.datum_hr(od)} — još se smije mijenjati."
+    if od:
+        return False, (f"Rok je počeo {model.datum_hr(od)} — učenici već mogu rješavati, "
+                       "test se više ne mijenja.")
+    return False, "Test je objavljen bez roka — promjena bi utjecala na učenike."
+
+
+def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "caki",
+             danas=None) -> dict:
+    """Izmijeni test ako je dopušteno. Vraća novi zapis (ili baca `ValueError` s razlogom)."""
+    smije, razlog = smije_urediti(sheet, definicija, danas=danas)
+    if not smije:
+        raise ValueError(razlog)
+    dopusteno = {"naziv", "napomena", "trajanje_min", "rok_od", "rok_do", "student_view_json",
+                 "vrsta", "predmet"}
+    izmjene = {k: v for k, v in (promjene or {}).items() if k in dopusteno}
+    if not izmjene:
+        raise ValueError("Nema dopuštenih polja za izmjenu.")
+    tablice.azuriraj(sheet, tablice.TAB_DEFINICIJE, "definicija_id",
+                     model.tekst(definicija.get("definicija_id")), izmjene)
+    zapisi_radnju = getattr(tablice, "zapisi_radnju", None)
+    if zapisi_radnju:
+        try:
+            zapisi_radnju(sheet, korisnik, "izmjena_testa",
+                          model.tekst(definicija.get("definicija_id")),
+                          ", ".join(sorted(izmjene)))
+        except Exception:                              # noqa: BLE001
+            pass
+    return {**definicija, **izmjene}

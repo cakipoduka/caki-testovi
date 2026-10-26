@@ -40,3 +40,13 @@ arhitektura. Ista praksa kao za razvoj CRM-a (`CAKI_razvoj/upute/`), samo što o
 | Datum | Faza | Izvještaj |
 |---|---|---|
 | 25.10.2026. | **Faza A** — temelj (test kao zapis, dodjele, ocjenjivanje, autosave, aplikacija s 4 kartice) | `UPDATE_25-10_fazaA_temelj.md` |
+| 25.10.2026. | **Faza B (1. dio)** — ekran rješavanja: pitanje po pitanju, autosave, matematički unos, pregled bez upisa | `UPDATE_25-10_fazaB_ekran_rjesavanja.md` |
+| 25.10.2026. | **Faza B (2. dio)** — slike zadataka, 💡 AI pomoć (bez rješenja), 🎬 video u pregledu | `UPDATE_25-10_fazaB_slike_ai_video.md` |
+| 25.10.2026. | **Faza C** — mjerenje kvalitete (p, r, distraktori, α), po cjelinama, stranica učenika, CSV | `UPDATE_25-10_fazaC_kvaliteta_i_portal.md` |
+| 26.10.2026. | **Faza D (1. dio)** — radovi na papiru: prilaganje, potvrda pregleda | `UPDATE_26-10_fazaD_radovi.md` |
+| 26.10.2026. | **Ispravak** — učenik sam prilaže rad + 👀 praćenje pristupa + upload u Drive | `UPDATE_26-10_ucenik_rad_pracenje.md` |
+| 26.10.2026. | **🎓 Zaključne ocjene** — prosjek kroz testove, pragovi, izostanak ≠ nula | `UPDATE_26-10_zakljucne_ocjene.md` |
+| 26.10.2026. | **📄 Izvještaj za roditelje** — HTML → PDF, escapirano | `UPDATE_26-10_izvjestaj_roditelji.md` |
+| 26.10.2026. | **📨 Koga podsjetiti** — 3 stanja, poruke prilagođene situaciji | `UPDATE_26-10_podsjetnik.md` |
+
+**Najbrži ulaz:** `STATUS.md` (jedna stranica) → `KAKO_POKRENUTI.md` (postavljanje).

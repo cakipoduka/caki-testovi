@@ -50,6 +50,20 @@ UPUTE = {
         "pazi": ["Rezultat je prazan dok učenik ne preda — „⏳” nije greška."],
         "dalje": "Mjerenje kvalitete zadatka (težina, diskriminativnost) dolazi u Fazi C.",
     },
+    "ocjene": {
+        "naslov": "Kako se računa predlog zaključne ocjene",
+        "koraci": [
+            "Sustav uzima **sve predane testove** učenika i računa prosjek postotaka.",
+            "Iz prosjeka predlaže ocjenu: **<50 % = 1**, 50–64 % = 2, 65–79 % = 3, 80–89 % = 4, 90 %+ = 5.",
+            "Test koji učenik **nije pisao** ne ulazi u prosjek kao nula — bilježi se odvojeno.",
+            "Tablica pokazuje i **koliko testova** je pisao (npr. 1/2) i koje nije.",
+        ],
+        "pazi": [
+            "Predlog je **izračun, ne odluka** — profesor ocjenu mijenja po svom nahođenju.",
+            "Učenici na granici (49/50, 64/65, 79/80, 89/90) posebno se izdvajaju.",
+        ],
+        "dalje": "CSV izvoz je za šifrarnik ili e-dnevnik.",
+    },
     "kvaliteta": {
         "naslov": "Kako čitati mjerenje zadataka",
         "koraci": [

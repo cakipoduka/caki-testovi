@@ -4,6 +4,10 @@ Jedna linija po isporuci. Detalji su u odgovarajućem `UPDATE_*.md`.
 
 | Datum | Faza / tema | Što je ušlo | Testovi | Izvještaj |
 |---|---|---|---|---|
+| 26.10.2026. | **📄 Pravi PDF** | `pdf_izvjestaj` (Vera.ttf iz reportlaba pokriva č ć ž š đ — bez downloada) · PDF gumb uz HTML · pad PDF-a ne ruši stranicu | **151** (8 novih) | `UPDATE_26-10_pdf_izvjestaj.md` |
+| 26.10.2026. | **📨 Koga podsjetiti** | `podsjetnik` (3 stanja, poruke prilagođene situaciji, tekst za kopiranje) · sklopivo u Rezultatima | +10 | `UPDATE_26-10_podsjetnik.md` |
+| 26.10.2026. | **📄 Izvještaj za roditelje** | `izvjestaj` (HTML → PDF iz browsera, hrvatski znakovi rade, escapiranje) · gumb uz svakog učenika u Rezultatima | +8 | `UPDATE_26-10_izvjestaj_roditelji.md` |
+| 26.10.2026. | **🎓 Zaključne ocjene** | `zakljucna` (prosjek kroz testove, pragovi 50/65/80/90, izostanak ≠ nula, granični slučajevi, CSV) · kartica **🎓 Ocjene** | **125** (13 novih) | `UPDATE_26-10_zakljucne_ocjene.md` |
 | 26.10.2026. | **Ispravak: učenik prilaže rad + 👀 praćenje** | `drive` (upload u Drive s fallbackom na poveznicu) · `posjete` (posjeta/test/rad, jednom po sesiji) · 📷 prilog u stranici učenika · 👀 tablica u Rezultatima · tabovi `Radovi`, `Posjete` | **112** (15 novih) | `UPDATE_26-10_ucenik_rad_pracenje.md` |
 | 26.10.2026. | **Faza D (1. dio) — radovi na papiru** | `radovi` (poveznica ili upload, potvrda pregleda, sigurno ime datoteke) · novi tab `Radovi` · prilaganje u 📊 Rezultatima | **97** (8 novih) | `UPDATE_26-10_fazaD_radovi.md` |
 | 25.10.2026. | **Faza C (dopuna) — po cjelinama + CSV** | `analitika.po_cjelinama`, `najslabija_cjelina` u sažetku · tablica cjelina u 📈 Kvaliteti · **CSV izvoz** rezultata za Excel | **89** (4 nova) | `UPDATE_25-10_fazaC_kvaliteta_i_portal.md` §7 |

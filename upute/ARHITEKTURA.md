@@ -41,6 +41,10 @@
 | `radovi.py` | 📷 radovi na papiru: prilog učenika ili profesora, potvrda pregleda (tab `Radovi`) | `model`, `tablice` |
 | `drive.py` | upload skena u Drive (25 MB limit, fallback na poveznicu) | `google-api-python-client` |
 | `posjete.py` | 👀 praćenje pristupa: posjeta/test/rad, **jednom po sesiji** (kvota) | `model`, `tablice` |
+| `zakljucna.py` | 🎓 zaključna ocjena: prosjek kroz testove, pragovi, izostanak ≠ nula | `model` |
+| `izvjestaj.py` | 📄 HTML izvještaj za roditelje (escapirano, bez font-rizika) | `model`, `zakljucna` |
+| `pdf_izvjestaj.py` | 📄 PDF izvještaj (Vera.ttf iz reportlaba — hrvatska slova) | `model`, `zakljucna`, `reportlab` |
+| `podsjetnik.py` | 📨 koga podsjetiti (3 stanja) + tekst poruke | `model` |
 
 ## 3. Model podataka
 

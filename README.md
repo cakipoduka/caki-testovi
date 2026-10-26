@@ -95,6 +95,15 @@ i doda stupce `video_url`/`video_naslov` u bazu zadataka.
 | `provedba.py` | pokušaj, autosave, predaja, ručna ocjena |
 | `ocjenjivanje.py` | tri sloja: string → SymPy → AI (**AI samo predlaže**) |
 | `grupe.py` | grupe Upisa i kante Mature |
+| `rjesavanje.py` · `ekran_ucenika.py` | logika i ekran rješavanja (autosave, pregled) |
+| `unos_odgovora.py` | matematičko polje (MathLive) + fallback |
+| `slike_zadataka.py` · `drive.py` | slike zadataka i upload skenova (Drive) |
+| `ai_pomoc.py` | 💡 pomoć (nikad rješenje, max 3 pitanja) |
+| `analitika.py` | mjerenje zadataka (p, r, distraktori, α, po cjelinama) |
+| `zakljucna.py` | 🎓 zaključna ocjena iz više testova |
+| `izvjestaj.py` | 📄 izvještaj za roditelje (HTML → PDF) |
+| `podsjetnik.py` | 📨 koga podsjetiti + tekst poruke |
+| `posjete.py` | 👀 praćenje pristupa (jednom po sesiji) |
 | `upute.py` | upute unutar aplikacije (nikad zasebna stranica) |
 
 **Pravilo:** nijedan modul osim `tablice.py` ne uvozi `gspread`. Kad dođe Supabase, mijenja se jedan

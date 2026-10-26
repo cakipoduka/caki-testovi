@@ -20,9 +20,11 @@ import definicije
 import dodjele
 import ekran_ucenika
 import grupe
+import izvjestaj
 import model
 import tablice
 import upute
+import zakljucna
 from veza import sheet_baze, sheet_crm
 
 st.set_page_config(page_title="CAKI — Testovi v2", page_icon="🧪", layout="wide")
@@ -254,8 +256,9 @@ with st.sidebar:
     tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
     st.caption("Tabove pripremaš u ⚙️ Postavkama (jednom, prvi put).")
 
-tab_testovi, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ucenik, tab_postavke = st.tabs(
-    ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
+tab_testovi, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
+    ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🎓 Ocjene",
+     "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
 
 
 # ------------------------------------------------------------------ 🧪 Testovi
@@ -492,6 +495,35 @@ with tab_rezultati:
                     } for r in sorted(_pracenje.values(), key=lambda x: x["zadnji"], reverse=True)],
                         hide_index=True, width="stretch")
 
+            # --- 📨 koga podsjetiti
+            with st.expander("📨 Koga podsjetiti (i što mu napisati)"):
+                try:
+                    _prac = posjete.sazetak(_sheet())
+                except Exception:                   # noqa: BLE001
+                    _prac = {}
+                _redci_p = podsjetnik.popis(dod, pok, _prac)
+                _b = podsjetnik.brojevi(podsjetnik.popis(dod, pok, _prac, samo_aktivne=False))
+                st.caption(f"Nije otvorio portal: **{_b['nije_otvorio']}** · "
+                           f"otvorio a nije počeo: **{_b['otvorio_nije_poceo']}** · "
+                           f"počeo a nije predao: **{_b['poceo_nije_predao']}** · "
+                           f"predao: **{_b['predao']}**")
+                if not _redci_p:
+                    st.success("Svi su predali — nema koga podsjetiti.")
+                else:
+                    st.dataframe([{
+                        "Učenik": r["ime"],
+                        "Šifra": r["ucenik_id"],
+                        "Grupa": r["grupa"] or "—",
+                        "Stanje": r["opis"],
+                        "Posjeta": r["posjeta"],
+                    } for r in _redci_p], hide_index=True, width="stretch")
+                    st.text_area(
+                        "Tekst za kopiranje (WhatsApp / e-mail)",
+                        value=podsjetnik.sve_poruke(_redci_p, model.tekst(d.get("naziv"))),
+                        height=220, key="v2_podsjetnik_tekst")
+                    st.caption("Aplikacija **ne šalje** poruke — kopiraj tekst i pošalji svojim "
+                               "kanalom (WhatsApp grupa, e-mail, roditelj).")
+
             # --- izvoz za Excel (profesor zna raditi s tablicom)
             import csv
             import io
@@ -556,6 +588,31 @@ with tab_rezultati:
                                 _osvjezi()
                             except Exception as e:       # noqa: BLE001
                                 st.error(f"Nije uspjelo: {e}")
+
+                    # 📄 izvještaj za roditelje (HTML → ispiši kao PDF; hrvatski znakovi rade)
+                    try:
+                        _rez = [{
+                            "naziv": model.tekst(d.get("naziv")),
+                            "bodovi": model.broj(p.get("bodovi")),
+                            "maks": model.broj(p.get("bodovi_max")),
+                            "datum": model.datum_hr(model.tekst(p.get("predano"))),
+                        }]
+                        pdf_izvjestaj.prikazi_preuzimanje(
+                            st,
+                            ucenik={"ucenik_id": model.tekst(x.get("ucenik_id")), "ime": ime,
+                                    "grupa": model.tekst(x.get("grupa"))},
+                            testovi=_rez, radovi=_radovi,
+                            kljuc=_pid + "_" + model.tekst(x.get("ucenik_id")),
+                        )
+                        izvjestaj.prikazi_preuzimanje(
+                            st,
+                            ucenik={"ucenik_id": model.tekst(x.get("ucenik_id")), "ime": ime,
+                                    "grupa": model.tekst(x.get("grupa"))},
+                            testovi=_rez, radovi=_radovi,
+                            kljuc=_pid + "_" + model.tekst(x.get("ucenik_id")),
+                        )
+                    except Exception as e:           # noqa: BLE001
+                        st.caption(f"Izvještaj se ne može pripremiti: {e}")
 
                     odg = provedba.odgovori(p)
                     ekran_ucenika.prikazi_pregled_rjesenja(
@@ -627,6 +684,46 @@ with tab_kvaliteta:
                         oznaka = "✅ točan" if dist["tocan"] else ("⚫ mrtav" if dist["mrtav"] else "")
                         st.progress(min(1.0, float(dist["udio"])),
                                     text=f"{dist['opcija'][:40]} — {dist['odabrano']}× {oznaka}")
+
+
+with tab_ocjene:
+    upute.prikazi(st, "ocjene")
+    testovi_z = _testovi()
+    if not testovi_z:
+        st.info("Ocjene se računaju kad postoje testovi i dodjele.")
+    else:
+        testovi_po_id = {model.tekst(x.get("definicija_id")): x for x in testovi_z}
+        redci = zakljucna.prikupi(_dodjele(), _pokusaji(), testovi_po_id)
+
+        if not redci:
+            st.info("Nema dodjela — prvo objavi test u 👥 Objavi.")
+        else:
+            sazetak = zakljucna.sazetak(redci)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Učenika", sazetak["ukupno"])
+            m2.metric("Prosjek razreda", f"{sazetak['prosjek_razredda'] if False else sazetak['prosjek_razreda']} %")
+            m3.metric("Odličnih (5)", sazetak["po_ocjeni"].get(5, 0))
+
+            for u in zakljucna.upozorenja(redci):
+                st.warning(u)
+
+            st.dataframe(zakljucna.tablica(redci), hide_index=True, width="stretch")
+
+            st.caption("Predlog ocjene je **izračun**, ne odluka. Profesor ga mijenja po svom "
+                       "nahođenju — pragovi su 50/65/80/90 %.")
+
+            import csv
+            import io
+
+            _buf = io.StringIO()
+            _p = csv.writer(_buf, delimiter=";")
+            _p.writerow(["Ucenik", "Sifra", "Grupa", "Testova", "Prosjek %", "Predlog"])
+            for r in redci:
+                _p.writerow([r.get("ime") or r["ucenik_id"], r["ucenik_id"], r.get("grupa", ""),
+                             f"{r['pisao']}/{r['pisao'] + r['nije_pisao_broj']}",
+                             r["prosjek"], r["predlog_naziv"]])
+            st.download_button("⬇️ Preuzmi ocjene (CSV)", data=_buf.getvalue().encode("utf-8-sig"),
+                               file_name="zakljucne_ocjene.csv", mime="text/csv", key="v2_ocj_csv")
 
 
 with tab_ucenik:

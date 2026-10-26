@@ -344,7 +344,8 @@ def generiraj(*, naziv: str, zadaci: list, datum: str = "", tip: str = TIP_DOKUM
         ukupno_bodova=f"{ukupno:g}",
         kategorije_redovi=izgradi_kategorije_redovi(ukupno_po_kategoriji(zadaci)),
         predmet_zaglavlje=predmet_zaglavlje,
-        rjesenja_sekcija=(r"\input{generated/rjesenja_body}" if ukljuci_rjesenja else ""),
+        rjesenja_sekcija=(("\\newpage\n" + r"\input{generated/rjesenja_body}")
+                          if ukljuci_rjesenja else ""),
     )
 
     with tempfile.TemporaryDirectory() as tmp:

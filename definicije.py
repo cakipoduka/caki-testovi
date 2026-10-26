@@ -208,7 +208,8 @@ def nova_definicija(*, definicija_id: str, naziv: str, predmet: str, zadaci_: li
                     vrsta: str = "ocjena", razina: str = "", autor: str = "",
                     ustanova_id: str = "caki", napomena: str = "",
                     student_view=None, varijanta_pravilo=None,
-                    status: str = "nacrt") -> dict:
+                    status: str = "nacrt",
+    ai_pomoc: str = "da") -> dict:
     """Sastavi zapis testa (dict spreman za `tablice.dodaj`)."""
     if status not in STANJA:
         raise ValueError(f"Nepoznato stanje: {status}")
@@ -235,6 +236,7 @@ def nova_definicija(*, definicija_id: str, naziv: str, predmet: str, zadaci_: li
         "autor": model.tekst(autor),
         "kreirano": model.sada_iso(),
         "napomena": model.tekst(napomena),
+        "ai_pomoc": "da" if model.tekst(ai_pomoc).lower() in ("da", "1", "true") else "ne",
     }
 
 

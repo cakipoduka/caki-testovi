@@ -25,6 +25,7 @@ import izvjestaj
 import model
 import slike_zadataka
 import tablice
+import samoprovjera
 import tex_test
 import upute
 import zakljucna
@@ -426,14 +427,9 @@ with tab_pdf:
                                 _odabrani[_zid] = _z
                                 st.rerun()
                         st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:900])
-                        _opcije_z = [model.tekst(o) for o in (_z.get("opcije") or [])
-                                     if model.tekst(o)]
-                        if _opcije_z:
-                            _slova = [chr(65 + i) for i in range(len(_opcije_z))]
-                            _red = " &nbsp;&nbsp; ".join(
-                                f"**{_slova[i]})** {builder.pripremi_za_prikaz(o)}"
-                                for i, o in enumerate(_opcije_z))
-                            st.markdown(_red)
+                        _opcije_md = banka.opcije_markdown(_z)
+                        if _opcije_md:
+                            st.markdown(_opcije_md)
                         st.caption(" · ".join(builder.oznake(_z)))
                         if _prikazi_slike and model.tekst(_z.get("slika")):
                             try:
@@ -1105,6 +1101,13 @@ with tab_ucenik:
 
 with tab_postavke:
     upute.prikazi(st, "postavke")
+
+    st.subheader("🧪 Samoprovjera (prijašnja rješenja)")
+    with st.expander("Pokaži samoprovjeru", expanded=False):
+        try:
+            samoprovjera.prikazi(st)
+        except Exception as _e_sp:                 # noqa: BLE001
+            st.caption(f"Samoprovjera nije dostupna: {_e_sp}")
 
     st.subheader("🩺 Provjera sustava")
     try:

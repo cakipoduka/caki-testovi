@@ -47,50 +47,66 @@ def ucitaj(sheet) -> list[dict]:
 
 
 def _opcije(retak: dict) -> list[str]:
-    """Ponuđeni odgovori: JSON lista, tekst s prijelomima ili „A) …; B) …"."""
-    sirovo = retak.get("ponudjeni_odgovori")
-    if isinstance(sirovo, list):
+    """Ponuđeni odgovori u svim oblicima: JSON lista, Python lista, `;`, prijelomi, „A) …”.
+
+    Preuzeto pravilo iz pipelinea (točka 13): baza drži JSON listu **bez** oznaka A/B/C/D —
+    ali stariji zapisi i ručni unos imaju druge oblike, pa se svi prihvaćaju.
+    """
+    sirovo = (retak or {}).get("ponudjeni_odgovori")
+    if isinstance(sirovo, (list, tuple)):
         return [model.tekst(o) for o in sirovo if model.tekst(o)]
     tekst = model.tekst(sirovo)
     if not tekst:
         return []
-    kao_json = model.kao_json(tekst)
-    if kao_json:
-        return [model.tekst(o) for o in kao_json if model.tekst(o)]
-    dijelovi = [d.strip() for d in tekst.replace(";", "\n").split("\n") if d.strip()]
-    ocisceno = []
-    for d in dijelovi:
-        d = model.tekst(d)
-        if len(d) > 1 and d[0].upper() in "ABCDEFGHIJ" and d[1] in ")]:-":
-            d = d[2:].strip()
-        ocisceno.append(d)
-    return [d for d in ocisceno if d]
 
+    # 1) JSON lista
+    import json
 
+    for pokusaj in (tekst, tekst.replace("'", '"')):
+        try:
+            podaci = json.loads(pokusaj)
+        except Exception:                              # noqa: BLE001
+            podaci = None
+        if isinstance(podaci, list):
+            ocisceno = [model.tekst(o) for o in podaci if model.tekst(o)]
+            if ocisceno:
+                return ocisceno
+        elif isinstance(podaci, str) and podaci.strip() and podaci != tekst:
+            tekst = podaci.strip()
+            break
 
-# ------------------------------------------------------------------ aliasi stupaca
+    # 2) Python literal (npr. "['x=1', 'x=2']")
+    import ast
 
-# Baza je mijenjana kroz vrijeme (i drugi agent je radi), pa isti podatak ima različita imena.
-# Umjesto tvrdog naziva — **prvi koji postoji**. Tako radi i sa starom i s novom shemom.
-ALIASI = {
-    "bodovi": ("bodovi", "max_bodovi", "poeni", "bod", "vrijednost_bodova"),
-    "bloom": ("bloom", "bloom_razina", "kognitivna_razina", "kognitivno"),
-    "tekst_zadatka_latex": ("tekst_zadatka_latex", "tekst_zadatka_mathjax", "tekst"),
-    "konacan_odgovor": ("konacan_odgovor", "odgovor", "rjesenje_kratko"),
-    "tip_zadatka": ("tip_zadatka", "tip"),
-    "slika_putanja": ("slika_putanja", "slika"),
-    "izvor": ("biblioteka_izvora", "izvor_naziv", "izvor"),
-}
+    try:
+        podaci = ast.literal_eval(tekst)
+        if isinstance(podaci, (list, tuple)):
+            ocisceno = [model.tekst(o) for o in podaci if model.tekst(o)]
+            if ocisceno:
+                return ocisceno
+    except Exception:                                  # noqa: BLE001
+        pass
 
+    # 3) tekst: `;`, prijelomi redaka ili `|`
+    sirovi_dijelovi = []
+    for sep in (";", "\n", "|"):
+        if sep in tekst:
+            sirovi_dijelovi = tekst.split(sep)
+            break
+    if not sirovi_dijelovi:
+        sirovi_dijelovi = [tekst]
 
-def prvo(retak: dict, kljuc: str, zadano=""):
-    """Prva neprazna vrijednost među aliasima za `kljuc` (npr. `bodovi` ili `max_bodovi`)."""
-    r = retak or {}
-    for ime in ALIASI.get(kljuc, (kljuc,)):
-        vrijednost = model.tekst(r.get(ime))
-        if vrijednost:
-            return r.get(ime)
-    return zadano
+    izlaz = []
+    for dio in sirovi_dijelovi:
+        d = model.tekst(dio)
+        if not d:
+            continue
+        # skini oznaku „A)", „b.", „C:”
+        if len(d) > 2 and d[0].upper() in "ABCDEFGHIJ" and d[1] in ")]:.-":
+            d = model.tekst(d[2:])
+        if d:
+            izlaz.append(d)
+    return izlaz
 
 
 def zadatak_iz_retka(retak: dict) -> dict | None:
@@ -144,6 +160,31 @@ def po_id(zadaci: list[dict]) -> dict[str, dict]:
 # Stupci koje v2 STVARNO čita iz taba `Zadaci`. Ako se neki preimenuje ili obriše,
 # `provjeri_shemu()` to javi — bolje nego da polja tiho postanu prazna.
 # STVARNO obavezno: bez ovoga zadatak nije upotrebljiv.
+# ------------------------------------------------------------------ aliasi stupaca
+
+# Baza je mijenjana kroz vrijeme, pa isti podatak ima različita imena. Umjesto tvrdog naziva —
+# **prvi koji postoji**. Tako radi i sa starom i s novom shemom.
+ALIASI = {
+    "bodovi": ("bodovi", "max_bodovi", "poeni", "bod", "vrijednost_bodova"),
+    "bloom": ("bloom", "bloom_razina", "kognitivna_razina", "kognitivno"),
+    "tekst_zadatka_latex": ("tekst_zadatka_latex", "tekst_zadatka_mathjax", "tekst"),
+    "konacan_odgovor": ("konacan_odgovor", "odgovor", "rjesenje_kratko"),
+    "tip_zadatka": ("tip_zadatka", "tip"),
+    "slika_putanja": ("slika_putanja", "slika"),
+    "izvor": ("biblioteka_izvora", "izvor_naziv", "izvor"),
+}
+
+
+def prvo(retak: dict, kljuc: str, zadano=""):
+    """Prva neprazna vrijednost među aliasima za `kljuc` (npr. `bodovi` ili `max_bodovi`)."""
+    r = retak or {}
+    for ime in ALIASI.get(kljuc, (kljuc,)):
+        vrijednost = model.tekst(r.get(ime))
+        if vrijednost:
+            return r.get(ime)
+    return zadano
+
+
 STUPCI_KOJE_CITAMO = ["id", "tekst_zadatka_latex", "konacan_odgovor"]
 # Poželjno, ali se čita kroz aliasе (npr. `max_bodovi` umjesto `bodovi`) — ne blokira rad.
 STUPCI_S_ALIASIMA = {
@@ -272,3 +313,59 @@ def postavi_video(sheet, zadatak_id: str, url: str, naslov: str = "") -> tuple[b
                 ws.update_cell(br, zaglavlje.index(STUPAC_VIDEO_NASLOV) + 1, model.tekst(naslov))
             return True
     return False
+
+# ------------------------------------------------------------------ prikaz opcija
+# PREUZETO iz `caki-baza-zadataka/baza_zadataka_pipeline.py` (isti prikaz kao u bazi).
+def _izgleda_kao_recenica(raw):
+    """Heuristika: ako sadrži razmak I ima više slova nego brojeva/simbola, vjerojatno je
+    obična rečenica (npr. 'ne može se odrediti'), a ne matematički izraz."""
+    if " " not in raw:
+        return False
+    slova = sum(c.isalpha() for c in raw)
+    ostalo = len(raw) - slova
+    return slova > ostalo
+
+def prikazi_opcije_markdown(ponudjeni_odgovori) -> str:
+    """Vraća Markdown string za PREGLED ponuđenih odgovora (višestruki izbor) u Streamlit
+    sučelju (ne za LaTeX!) - Streamlitov st.markdown zna renderirati $...$ preko KaTeX-a.
+    Baza sprema opcije BEZ $ omotača (čist LaTeX), pa ih ovdje samo omatamo radi prikaza -
+    isto načelo kao formatiraj_opciju() u pages/2_test_builder.py, ali za Streamlit prikaz,
+    ne za LaTeX izlaz. Zajednička funkcija za baza_zadataka_app.py (stranica 'Uredi zadatak')
+    i pages/2_test_builder.py (pregled u pretrazi/odabiru) - da se prikaz opcija ne dupllicira
+    na dva mjesta i ne razmimoiđe (npr. broj podržanih slova A-?).
+
+    POPRAVAK (11.9.2026.): opcija se više NE omata bezuvjetno u $...$ kad nema eksplicitnog
+    $ znaka - to je uzrokovalo da običan tekst (npr. "ne postoji rješenje") KaTeX renderira
+    kao matematiku, gdje se razmaci između riječi ignoriraju (riječi se prikazuju spojene i
+    kurzivom - vidi prijavljeni bug, 11.9.2026.). Umjesto toga koristi se ista heuristika kao
+    _pretext_math_or_text/_izgleda_kao_recenica niže u ovoj datoteci (PreTeXt izlaz): ako
+    opcija izgleda kao rečenica (ima razmak i pretežno je od slova), tretira se kao OBIČAN
+    TEKST, bez $...$ omota; inače (kratak matematički izraz, npr. "3x-9" ili "√2") i dalje se
+    omata u $...$ kao dosad. Ovo je heuristika, ne savršena - za rubne slučajeve gdje
+    heuristika promaši, autor može ručno upisati $ znakove izravno u opciju (grana "$" in
+    opcija iznad uvijek ima prednost)."""
+    dijelovi = []
+    for i, opcija in enumerate(ponudjeni_odgovori):
+        opcija = (opcija or "").strip()
+        if not opcija:
+            continue
+        if "$" in opcija:
+            prikaz = opcija
+        elif _izgleda_kao_recenica(opcija):
+            prikaz = opcija
+        else:
+            prikaz = f"${opcija}$"
+        slovo = SLOVA_PONUDJENIH_ODGOVORA[i] if i < len(SLOVA_PONUDJENIH_ODGOVORA) else str(i + 1)
+        dijelovi.append(f"**{slovo})** {prikaz}")
+    return "  ".join(dijelovi)
+
+
+def opcije_markdown(zadatak: dict) -> str:
+    """Markdown s ponuđenim odgovorima A) … za prikaz u popisu (baza → UI)."""
+    opcije = _opcije(zadatak or {})
+    if not opcije:
+        return ""
+    try:
+        return prikazi_opcije_markdown(opcije)
+    except Exception:                                  # noqa: BLE001
+        return "  ".join(f"**{chr(65 + i)})** {o}" for i, o in enumerate(opcije))

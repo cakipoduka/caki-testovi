@@ -12,6 +12,9 @@ arhitektura. Ista praksa kao za razvoj CRM-a (`CAKI_razvoj/upute/`), samo što o
 |---|---|
 | **`KAKO_POKRENUTI.md`** | kratka uputa: tajne, prvi ulazak, sigurnosne kočnice, rješavanje problema |
 | **`ARHITEKTURA.md`** | moduli, model podataka, pravila koja se ne krše |
+| **`UX_PRAVILA.md`** | pravila preglednosti i jednostavnosti (provjeri prije isporuke) |
+| **`ANALIZA_STAROG_KODA.md`** | stari builder ↔ v2: što je preuzeto, što fali |
+| **`PRAVILO_preuzmi_stari_kod.md`** | prvo pregledaj stari kod, pa piši |
 | **`DNEVNIK.md`** | jedna linija po isporuci — brzi pregled povijesti |
 | **`UPDATE_DD-MM_tema.md`** | izvještaj po isporuci (što je napravljeno, odluke, bugovi, testovi, sljedeće) |
 

@@ -259,7 +259,7 @@ with st.sidebar:
     st.caption("Tabove pripremaš u ⚙️ Postavkama (jednom, prvi put).")
 
 tab_testovi, tab_pdf, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
-    ["🧪 Testovi", "📄 PDF testa", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🎓 Ocjene",
+    ["🧪 Testovi", "🧱 Složi test", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🎓 Ocjene",
      "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
 
 
@@ -363,7 +363,8 @@ with tab_testovi:
 
 with tab_pdf:
     upute.prikazi(st, "pdf")
-    st.caption("Složi test iz baze i generiraj **PDF** — isti stilovi kao u starom Test Builderu.")
+    st.caption("**Jedno mjesto za slaganje testa:** odaberi zadatke iz baze → ispiši **PDF** ili "
+               "spremi kao **online test** (isti odabir, dva izlaza).")
 
     _zadaci_pdf = _zadaci()
     if not _zadaci_pdf:
@@ -405,39 +406,84 @@ with tab_pdf:
                                        key="v2p_prikazi_slike",
                                        help="Isključi ako je popis spor ili ako slike nisu potrebne.")
             _odabrani = st.session_state.setdefault("v2p_odabrani", {})
-            if st.button(f"➕ Dodaj sve prikazane ({len(_info['zadaci'])})", key="v2p_dodaj_sve"):
-                for _zz in _info["zadaci"]:
-                    _zid_s = model.tekst(_zz.get("id"))
-                    if _zid_s:
-                        st.session_state[f"v2p_chk_{_zid_s}"] = True
-                        _odabrani[_zid_s] = _zz
-                st.rerun()
-            for _z in _info["zadaci"]:
-                _zid = model.tekst(_z.get("id"))
-                with st.container(border=True):
-                    c1, c2 = st.columns([5, 1])
-                    c1.markdown(f"**{builder.naslov_kartice(_z)}**")
-                    c2.checkbox("dodaj", key=f"v2p_chk_{_zid}", label_visibility="collapsed")
-                    st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:700])
-                    st.caption(" · ".join(builder.oznake(_z)))
-                    if _prikazi_slike and model.tekst(_z.get("slika")):
-                        try:
-                            slike_zadataka.prikazi_sliku_zadatka(st, _z.get("slika"))
-                        except Exception:               # noqa: BLE001 — slika ne blokira popis
-                            st.caption("🖼️ slika se ne može prikazati")
-                    if st.session_state.get(f"v2p_chk_{_zid}"):
-                        _odabrani[_zid] = _z
-                    else:
-                        _odabrani.pop(_zid, None)
 
-            n1, n2 = st.columns([2, 1])
-            if n1.button("◀ Prethodna stranica", disabled=_info["stranica"] == 0, key="v2p_prev"):
-                st.session_state["v2p_stranica"] = max(0, _info["stranica"] - 1)
-                st.rerun()
-            if n2.button("Sljedeća ▶", disabled=_info["stranica"] + 1 >= _info["stranica_ukupno"],
-                         key="v2p_next"):
-                st.session_state["v2p_stranica"] = _info["stranica"] + 1
-                st.rerun()
+            _lijevo, _desno = st.columns([3, 2])
+
+            with _lijevo:
+                _g1, _g2 = st.columns([1, 1])
+                if _g1.button(f"➕ Dodaj sve prikazane ({len(_info['zadaci'])})", key="v2p_dodaj_sve"):
+                    for _zz in _info["zadaci"]:
+                        _zid_s = model.tekst(_zz.get("id"))
+                        if _zid_s and _zid_s not in _odabrani:
+                            _odabrani[_zid_s] = _zz
+                    st.rerun()
+                if _g2.button("🧹 Očisti odabir", key="v2p_ocisti_gore"):
+                    st.session_state["v2p_odabrani"] = {}
+                    st.rerun()
+
+                for _z in _info["zadaci"]:
+                    _zid = model.tekst(_z.get("id"))
+                    _je_dodan = _zid in _odabrani
+                    with st.container(border=True):
+                        c1, c2 = st.columns([4, 1])
+                        c1.markdown(f"**{builder.naslov_kartice(_z)}**")
+                        if _je_dodan:
+                            c2.success("✓ već dodano")
+                        else:
+                            if c2.button("➕ Dodaj", key=f"v2p_add_{_zid}"):
+                                _odabrani[_zid] = _z
+                                st.rerun()
+                        st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:900])
+                        st.caption(" · ".join(builder.oznake(_z)))
+                        if _prikazi_slike and model.tekst(_z.get("slika")):
+                            try:
+                                _ok_slika = slike_zadataka.prikazi_sliku_zadatka(st, _z.get("slika"))
+                                if not _ok_slika:
+                                    st.caption("🖼️ slika nije prikazana → vidi „🩺 Zašto se slike ne vide”")
+                            except Exception as _e_slika:   # noqa: BLE001
+                                st.caption(f"🖼️ slika se ne može prikazati ({type(_e_slika).__name__})")
+
+            with _desno:
+                st.markdown(f"### 📋 Odabrano ({len(_odabrani)})")
+                if not _odabrani:
+                    st.caption("Nema odabranih zadataka. Dodaj ih gumbom ➕ lijevo.")
+                else:
+                    _ukupno_bod = sum(model.broj(z.get("bodovi"), 1) for z in _odabrani.values())
+                    st.caption(f"Ukupno **{_ukupno_bod:g}** bodova.")
+                    for _zid_d, _zd in list(_odabrani.items()):
+                        with st.container(border=True):
+                            d1, d2 = st.columns([4, 1])
+                            d1.markdown(f"**{model.tekst(_zd.get('id'))}** · "
+                                        f"{model.broj(_zd.get('bodovi'), 1):g} bod.")
+                            if d2.button("✕", key=f"v2p_del_{_zid_d}", help="ukloni iz odabira"):
+                                _odabrani.pop(_zid_d, None)
+                                st.rerun()
+                            d1.caption(builder.kratki_tekst(_zd, 70))
+
+                with st.expander("🩺 Zašto se slike ne vide"):
+                    try:
+                        _folderi = slike_zadataka.folder_kandidati(st.secrets)
+                        _racuni = slike_zadataka.sa_kandidati(st.secrets)
+                        st.caption(f"· Foldera u Secrets: **{len(_folderi)}**"
+                                   + (" (`SLIKE_FOLDER_ID`: " + _folderi[0][:12] + "…)"
+                                      if _folderi else " — dodaj `SLIKE_FOLDER_ID`"))
+                        st.caption(f"· Servisnih računa: **{len(_racuni)}**")
+                        if not _folderi:
+                            st.warning("Bez `SLIKE_FOLDER_ID` slike se ne mogu dohvatiti.")
+                        elif not _racuni:
+                            st.warning("Nema servisnog računa u Secrets.")
+                        else:
+                            st.caption("Ako folder postoji, provjeri da je **podijeljen s tim "
+                                       "računom** (barem „Viewer”).")
+                            _naziv = next((model.tekst(z.get("slika")) for z in _info["zadaci"]
+                                           if model.tekst(z.get("slika"))), "")
+                            if _naziv:
+                                _bytes = slike_zadataka.slika_bytes(_naziv, _folderi[0],
+                                                                    slike_zadataka.token(_racuni[0]))
+                                st.caption(f"· Probna slika `{_naziv}`: "
+                                           + ("**dohvaćena** ✅" if _bytes else "**nije dohvaćena** ❌"))
+                    except Exception as _e_d:            # noqa: BLE001
+                        st.caption(f"Dijagnostika nije dostupna: {_e_d}")
 
             st.divider()
             _lista = list(_odabrani.values())
@@ -466,18 +512,51 @@ with tab_pdf:
                 st.caption("🚫 **PDF je blokiran** dok se zbroj po kategorijama ne uskladi s bodovima "
                            "(isto pravilo kao u starom builderu).")
 
-            if st.button("📄 Generiraj PDF testa", type="primary",
-                         disabled=bool(_greska_naslov) or not _lista or bool(_problemi),
-                         key="v2p_generiraj"):
-                try:
-                    _pdf = tex_test.generiraj(naziv=_naslov, zadaci=_lista, datum=_datum,
-                                              tip=_tipd, ukljuci_rjesenja=_rjesenja)
-                    st.success(f"PDF generiran ({len(_pdf) // 1024} KB).")
-                    st.download_button("⬇️ Preuzmi PDF", data=_pdf,
-                                       file_name=tex_test.ime_datoteke(_naslov),
-                                       mime="application/pdf", key="v2p_preuzmi")
-                except Exception as _e:                 # noqa: BLE001 — nikad ne ruši karticu
-                    st.error(f"PDF nije generiran: {_e}")
+            _izlaz = st.radio("Što sa odabranim zadacima?",
+                              ["📄 Ispis (PDF)", "🌐 Online test (objavi učenicima)"],
+                              horizontal=True, key="v2p_izlaz")
+
+            if _izlaz.startswith("🌐"):
+                o1, o2, o3 = st.columns(3)
+                _predmet = o1.text_input("Predmet", value="matematika", key="v2p_predmet")
+                _trajanje = o2.number_input("Trajanje (min)", 5, 240, 45, 5, key="v2p_trajanje")
+                _vrsta = o3.selectbox("Vrsta", definicije.VRSTE, key="v2p_vrsta",
+                                      format_func=lambda v: definicije.VRSTA_NAZIV.get(v, v))
+                if st.button("💾 Spremi kao online test (nacrt)", type="primary",
+                             disabled=bool(_greska_naslov) or not _lista, key="v2p_spremi"):
+                    try:
+                        _novi_id = tablice.novi_id(
+                            [model.tekst(x.get("definicija_id")) for x in _testovi()], "T26-")
+                        _d = definicije.nova_definicija(
+                            definicija_id=_novi_id, naziv=_naslov, predmet=_predmet,
+                            zadaci_=_lista, trajanje_min=int(_trajanje), vrsta=_vrsta,
+                            autor="caki", status="nacrt",
+                            rok_od=model.iso_datum(model.datum(_datum) or model.sada().date()))
+                        _greske = definicije.validiraj(_d)
+                        if _greske:
+                            for _g in _greske:
+                                st.error(_g)
+                        else:
+                            tablice.dodaj(_sheet(), tablice.TAB_DEFINICIJE, [_d])
+                            tablice.zapisi_radnju(_sheet(), "caki", "novi_test", _novi_id, _naslov)
+                            st.success(f"Spremljeno kao nacrt `{_novi_id}` — objavi u 👥 Objavi.")
+                            st.session_state["v2p_odabrani"] = {}
+                            _osvjezi()
+                    except Exception as _e_u:            # noqa: BLE001
+                        st.error(f"Nije spremljeno: {_e_u}")
+            else:
+                if st.button("📄 Generiraj PDF testa", type="primary",
+                             disabled=bool(_greska_naslov) or not _lista or bool(_problemi),
+                             key="v2p_generiraj"):
+                    try:
+                        _pdf = tex_test.generiraj(naziv=_naslov, zadaci=_lista, datum=_datum,
+                                                  tip=_tipd, ukljuci_rjesenja=_rjesenja)
+                        st.success(f"PDF generiran ({len(_pdf) // 1024} KB).")
+                        st.download_button("⬇️ Preuzmi PDF", data=_pdf,
+                                           file_name=tex_test.ime_datoteke(_naslov),
+                                           mime="application/pdf", key="v2p_preuzmi")
+                    except Exception as _e:                 # noqa: BLE001 — nikad ne ruši karticu
+                        st.error(f"PDF nije generiran: {_e}")
         except Exception as _e:                         # noqa: BLE001
             st.error(f"Kartica PDF-a trenutno ne radi: {_e}")
 

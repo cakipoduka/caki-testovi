@@ -193,10 +193,25 @@ KATEGORIJE_INFO = [
     ("MK", "Matematička komunikacija"),
 ]
 
+# PREUZETO iz `baza_zadataka_pipeline.py`: više slika u jednom polju (`|`)
+SLIKE_RAZDJELNIK = "|"
+
+def razdvoji_slike(vrijednost) -> list:
+    """'a.png | b.png' -> ['a.png', 'b.png']; prazno/None -> []. Zadržava redoslijed, bez duplikata."""
+    rezultat = []
+    for dio in str(vrijednost or "").split(SLIKE_RAZDJELNIK):
+        dio = dio.strip()
+        if dio and dio not in rezultat:
+            rezultat.append(dio)
+    return rezultat
+
+def spoji_slike(popis) -> str:
+    return SLIKE_RAZDJELNIK.join(x for x in (str(p).strip() for p in popis or []) if x)
+
 # ------------------------------------------------------------------ tijelo zadataka (v2 oblik)
 
 def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = False,
-                mamac_tekst: str = "") -> tuple[str, str]:
+                mamac_tekst: str = "", slike: dict | None = None) -> tuple[str, str]:
     """Vrati (zadaci_body, rjesenja_body) — točno ono što `main.tex` uvozi."""
     zad_lines, rjes_lines = [], []
     for i, z in enumerate(zadaci or [], start=1):
@@ -212,8 +227,11 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
                 opcije = opcije + [model.tekst(mamac_tekst)]
             tekst += izgradi_opcije_blok(opcije)
 
-        slike = [model.tekst(z.get("slika"))] if model.tekst(z.get("slika")) else []
-        slika_rel = ",".join("images/" + x for x in slike)
+        # slike: može ih biti VIŠE (zarezom) — u PDF ide samo ono što je stvarno dohvaćeno
+        kandidati = razdvoji_slike(z.get("slika"))
+        dostupne = slike or {}
+        slike_za_pdf = [x for x in kandidati if not dostupne or x in dostupne]
+        slika_rel = ",".join("images/" + x for x in slike_za_pdf)
         zad_lines.append(
             r"\zadatakbod{" + tekst + "}{" + video + "}{" + bodovi + "}{" + slika_rel + "}{"
             + tip_z + "}{" + kategorije_tex + "}")
@@ -227,12 +245,23 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
     return "\n".join(zad_lines), "\n".join(rjes_lines)
 
 
+def broj_dolara(text):
+    """Broji '$' znakove koji NISU escapirani (\\$) - koristi se za provjeru
+    parnosti prije slanja u LaTeX. Neparan broj = zadatak će razbiti kompajliranje.
+
+    NAPOMENA (15.9.2026.): neka polja (konacan_odgovor, rjesenje) znaju stići kao
+    broj (int/float) umjesto string - stari kod (`text or ""`) je takvu vrijednost
+    slao izravno u re.findall, što baca TypeError. str() to ispravlja bez obzira
+    na tip; None i prazan string i dalje daju 0."""
+    return len(re.findall(r"(?<!\\)\$", str(text) if text is not None else ""))
+
+
 def _upozorenja(zadaci) -> list[str]:
     """Prije kompajliranja: neupareni `$` i prazni zadaci — najčešći uzroci pada pdflatexa."""
     problemi = []
     for i, z in enumerate(zadaci or [], start=1):
         tekst = model.tekst(z.get("tekst"))
-        if tekst.count("$") % 2:
+        if broj_dolara(tekst) % 2:
             problemi.append(f"Zadatak {i} ({model.tekst(z.get('id'))}): neuparen `$` u tekstu.")
         if not tekst.strip():
             problemi.append(f"Zadatak {i}: prazan tekst.")
@@ -304,7 +333,8 @@ def generiraj(*, naziv: str, zadaci: list, datum: str = "", tip: str = TIP_DOKUM
         raise RuntimeError("pdflatex nije instaliran u ovoj okolini "
                            "(na Streamlit Cloudu se instalira iz `packages.txt`).")
 
-    zadaci_body, rjesenja_body = izgradi_tex(zadaci, ukljuci_rjesenja, dodaj_mamac, mamac_tekst)
+    zadaci_body, rjesenja_body = izgradi_tex(zadaci, ukljuci_rjesenja, dodaj_mamac, mamac_tekst,
+                                            slike=slike)
     ukupno = sum(model.broj(z.get("bodovi"), 1) for z in zadaci)
     main_tex = popuni_predlozak(
         naziv=naziv,

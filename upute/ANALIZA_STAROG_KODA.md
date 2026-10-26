@@ -86,3 +86,39 @@ to je signal koji treba uvažiti.
 2. **Prije svakog zahvata**: pročitati odgovarajući dio starog builderа i popuniti matricu (§2).
 3. **Svaka nova kartica dobiva dimni test** (AppTest) prije nego se javi „gotovo".
 4. **Nikad ne tvrditi „ne postoji"** dok se ne pretraži cijeli repo po **mehanizmu** (pdflatex, API, worker), ne samo po biblioteci.
+
+---
+
+## 6. PDF kompajliranje — detaljna usporedba (Cakijev zahtjev 26.10.2026.)
+
+Caki je upozorio da je Claude u PDF uložio puno rada na rubne slučajeve. Provjereno **funkcija po
+funkcija**; nađene su **tri stvarne razlike** — jedna je rušila PDF.
+
+| Zaštita u starom kodu | v2 prije | v2 sada |
+|---|---|---|
+| **`razdvoji_slike`** — više slika u polju, razdjelnik **`\|`** (npr. `a.png \| b.png`) | ❌ slao cijeli string kao jedno ime → *File not found* | ✅ **preuzeto** iz `baza_zadataka_pipeline.py` |
+| **samo dohvaćene slike** idu u `\zadatakbod` (`if slike_bytes.get(x)`) | ❌ slao ime i kad slike nema → pdflatex padne | ✅ provjera prije slanja |
+| **`broj_dolara`** — broji samo neescapirane `$` (`(?<!\\)\$`) | ❌ `count("$")` → lažna blokada na `\$` (cijena u tekstu) | ✅ **preuzeto** |
+| `escape_outside_math` + `SPECIAL_CHARS` (\, &, %, #, _, {, }, ~, ^) | ✅ preuzeto | ✅ |
+| `formatiraj_opciju` — čista matematika → `$…$`, običan tekst → escape | ✅ preuzeto | ✅ |
+| `izgradi_opcije_blok` — prirodan tok, A) B) C), bilo koliko opcija | ✅ preuzeto | ✅ |
+| `provjeri_zbroj_kategorija` (UZV/RP/MK) | ❌ bio prazan `{}` | ✅ preuzeto + blokada |
+| dva prolaza `pdflatex`, `-no-shell-escape`, `-halt-on-error` | ✅ | ✅ (+ timeout 90 s) |
+| log zadnjih 40 redaka pri padu | ✅ | ✅ (u `RuntimeError`) |
+| `\cakiispithead` placeholderi (8) | ✅ | ✅ + provjera da nijedan nije ostao |
+| `KRAJ_OZNAKA` po tipu dokumenta | ✅ | ✅ |
+| `predmet_config` zaglavlje (MATEMATIKA/FIZIKA) | ⚠️ fiksno `MATEMATIKA` | ⚠️ isto — **za popraviti** |
+| `izgradi_stavke_blok` (skupine a) b) c)) | ❌ **nema** u v2 | ❌ — v2 još ne podržava skupine |
+| `prikazi_opcije` po zadatku (isključi opcije) | ❌ | ❌ |
+| `dodaj_mamac` („ništa od navedenog") | ⚠️ funkcija postoji | ⚠️ nije u UI |
+| `slika_valjana_za_prikaz` (provjera zaglavlja slike) | ❌ | ❌ — v2 šalje bajtove bez provjere |
+
+**Zaključak:** jezgra PDF-a (escapiranje, opcije, kategorije, placeholderi, dva prolaza) **je preuzeta**,
+ali tri zaštite oko **slika** i **dolara** su falile i sada su ugrađene.
+
+### Što još treba prije nego PDF bude „kao stari"
+
+1. **predmet_config** — zaglavlje po predmetu (sada fiksno `MATEMATIKA`).
+2. **skupine zadataka** (a/b/c) — `izgradi_stavke_blok`, `izgradi_rjesenja_blok` (18 KB modul).
+3. **`prikazi_opcije`** po zadatku.
+4. **provjera zaglavlja slike** prije slanja u pdflatex.

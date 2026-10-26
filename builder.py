@@ -69,12 +69,80 @@ def vrijednosti(zadaci: list[dict], polje: str) -> list[str]:
     return sorted({model.tekst(z.get(polje)) for z in (zadaci or []) if model.tekst(z.get(polje))})
 
 
-def potpoglavlja_za(zadaci: list[dict], cjelina="") -> list[str]:
-    """Potpoglavlja unutar odabranih cjelina (ili sva, ako cjelina nije odabrana)."""
+# ------------------------------------------------------------------ šifrarnik (izvor istine)
+
+TAB_SIFRARNIK_POTPOGLAVLJA = "Sifrarnik_potpoglavlja"
+TAB_SIFRARNIK_CJELINA = "Sifrarnik_cjelina"
+
+
+def ucitaj_sifrarnik(sheet) -> dict:
+    """{cjelina: [potpoglavlja…]} iz taba `Sifrarnik_potpoglavlja` (stupci: cjelina, potpoglavlje,
+    redoslijed). Ako taba nema — prazno (tada se koristi izvođenje iz zadataka)."""
+    import tablice
+
+    try:
+        redci = tablice.ucitaj(sheet, TAB_SIFRARNIK_POTPOGLAVLJA)
+    except Exception:                                  # noqa: BLE001 — taba nema
+        return {}
+    parovi = []
+    for r in redci:
+        cj = model.tekst(r.get("cjelina"))
+        pp = model.tekst(r.get("potpoglavlje"))
+        if not cj or not pp:
+            continue
+        try:
+            red = model.cijeli(r.get("redoslijed"), 0)
+        except Exception:                              # noqa: BLE001
+            red = 0
+        parovi.append((cj, pp, red))
+    izlaz: dict[str, list[str]] = {}
+    for cj, pp, _red in sorted(parovi, key=lambda x: (x[0], x[2], x[1])):
+        popis = izlaz.setdefault(cj, [])
+        if pp not in popis:
+            popis.append(pp)
+    return izlaz
+
+
+def potpoglavlja_za(zadaci: list[dict], cjelina="", sifrarnik=None) -> list[str]:
+    """Potpoglavlja za odabrane cjeline.
+
+    **Prvenstveno iz šifrarnika** (izvor istine). Ako šifrarnik nema tu cjelinu — izvodi se iz
+    zadataka (da filter ne ostane prazan na bazi bez šifrarnika).
+    """
     odabrane = _kao_lista(cjelina)
-    izvor = [z for z in (zadaci or [])
-             if not odabrane or model.tekst(z.get("cjelina")) in odabrane]
-    return vrijednosti(izvor, "potpoglavlje")
+    sifrarnik = sifrarnik or {}
+    izlaz: list[str] = []
+    for cj in (odabrane or list(sifrarnik)):
+        for pp in sifrarnik.get(cj, []):
+            if pp not in izlaz:
+                izlaz.append(pp)
+    if not odabrane:
+        # bez odabrane cjeline: sve iz šifrarnika, pa dopuni iz zadataka
+        for z in (zadaci or []):
+            pp = model.tekst(z.get("potpoglavlje"))
+            if pp and pp not in izlaz:
+                izlaz.append(pp)
+    return izlaz
+
+
+def neuskaldjeno(zadaci: list[dict], sifrarnik: dict | None = None) -> list[dict]:
+    """Zadaci čija veza (cjelina, potpoglavlje) NE postoji u šifrarniku — za upozorenje Cakiju.
+
+    Ne mijenja ništa; pokazuje gdje baza i šifrarnik nisu usklađeni (npr. zadatak razvrstan u
+    pogrešno potpoglavlje).
+    """
+    sifrarnik = sifrarnik or {}
+    if not sifrarnik:
+        return []
+    izlaz = []
+    for z in (zadaci or []):
+        cj = model.tekst(z.get("cjelina"))
+        pp = model.tekst(z.get("potpoglavlje"))
+        if not cj or not pp:
+            continue
+        if pp not in sifrarnik.get(cj, []):
+            izlaz.append({"id": model.tekst(z.get("id")), "cjelina": cj, "potpoglavlje": pp})
+    return izlaz
 
 
 # ------------------------------------------------------------------ stranice

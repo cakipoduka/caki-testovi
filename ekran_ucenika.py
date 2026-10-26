@@ -96,7 +96,7 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
         st.markdown(f"**Zadatak {index + 1}.** ({model.broj(z.get('bodovi'), 1):g} bod.)")
         st.markdown(rjesavanje.pripremi_latex(z.get("tekst")))
         if model.tekst(z.get("slika")):
-            slike_zadataka.prikazi_sliku_zadatka(st, z.get("slika"))
+            slike_zadataka.prikazi_sliku_html(st, z.get("slika"))
 
         opcije = [model.tekst(o) for o in (z.get("opcije") or []) if model.tekst(o)]
         if model.tekst(z.get("tip")) == "visestruki_izbor" and len(opcije) >= 2:

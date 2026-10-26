@@ -334,3 +334,63 @@ def prikazi_sliku_zadatka(st, naziv: str, *, sa_info_dict=None) -> bool:
     except Exception:
         st.caption("🖼️ Sliku trenutno nije moguće dohvatiti — javi Cakiju.")
         return False
+
+
+# ------------------------------------------------------------------ HTML prikaz (Kladova lekcija)
+
+def _valjana_slika(bajtovi: bytes) -> bool:
+    """Zaglavlje mora biti poznata slika — neispravna datoteka ne smije doći do prikaza."""
+    if not bajtovi or len(bajtovi) < 12:
+        return False
+    return (bajtovi[:8] == b"\x89PNG\r\n\x1a\n"
+            or bajtovi[:3] == b"\xff\xd8\xff"
+            or bajtovi[:6] in (b"GIF87a", b"GIF89a")
+            or (bajtovi[:4] == b"RIFF" and bajtovi[8:12] == b"WEBP"))
+
+
+def _mime(bajtovi: bytes) -> str:
+    if bajtovi[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if bajtovi[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if bajtovi[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return "image/webp"
+
+
+def html_slika(bajtovi: bytes, width: int = 420) -> str:
+    """`<img>` s ugrađenim base64 — PREGLEDNIK dekodira, server ne (zato ne ruši proces)."""
+    if not _valjana_slika(bajtovi):
+        return ""
+    import base64
+
+    return (f'<img src="data:{_mime(bajtovi)};base64,{base64.b64encode(bajtovi).decode()}" '
+            f'style="max-width:{int(width)}px;width:100%;height:auto;" />')
+
+
+def prikazi_sliku_html(st, naziv: str, folder: str = "", sa_info_dict=None,
+                       width: int = 420) -> bool:
+    """Prikaži sliku kao HTML (sigurno). Vraća True ako je prikazana."""
+    naziv = _tekst(naziv)
+    if not naziv:
+        return False
+    try:
+        folderi = [folder] if _tekst(folder) else folder_kandidati(st)
+        if not folderi:
+            return False
+        for ime_foldera in folderi:
+            podaci = sadrzaj = None
+            try:
+                podaci = sa_info_dict or sa_info(st)
+                if not podaci:
+                    continue
+                sadrzaj = slika_bytes(naziv, ime_foldera, token(podaci))
+            except Exception:                                # noqa: BLE001
+                continue
+            html = html_slika(sadrzaj, width=width) if sadrzaj else ""
+            if html:
+                st.markdown(html, unsafe_allow_html=True)
+                return True
+    except Exception:                                        # noqa: BLE001
+        return False
+    return False

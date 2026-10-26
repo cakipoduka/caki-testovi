@@ -429,7 +429,7 @@ with tab_pdf:
                         st.caption(" · ".join(builder.oznake(_z)))
                         if _prikazi_slike and model.tekst(_z.get("slika")):
                             try:
-                                _ok_slika = slike_zadataka.prikazi_sliku_zadatka(st, _z.get("slika"))
+                                _ok_slika = slike_zadataka.prikazi_sliku_html(st, _z.get("slika"))
                                 if not _ok_slika:
                                     st.caption("🖼️ slika nije prikazana → vidi „🩺 Zašto se slike ne vide”")
                             except Exception as _e_slika:   # noqa: BLE001

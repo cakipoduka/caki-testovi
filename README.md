@@ -26,7 +26,10 @@ učenika je zato nova dodjela — i duplikat više nije moguć.
 | **🧪 Testovi** | popis testova + slaganje novog testa iz postojeće baze (filtri po cjelini/težini/tipu) |
 | **👥 Objavi** | grupa / kanta / pojedinac, dopuna nakon objave, rok po učeniku |
 | **📊 Rezultati** | po testu: rang, prosjek, raspon, **ko nije predao**, po grupama |
-| **⚙️ Postavke** | Student View po testu, stupci za video u bazi |
+| **📈 Kvaliteta** | mjerenje zadataka: p, diskriminacija, distraktori, Cronbach α |
+| **🧑‍🎓 Kao učenik** | pregled ekrana rješavanja (ništa se ne sprema) |
+| **⚙️ Postavke** | provjera sustava/baze/tajni, Student View, priprema tabova |
+| **📝 Ucenik** *(u bočnoj traci)* | **prava stranica učenika** — prijava šifrom, rješavanje, pregled |
 
 **Još ne radi (sljedeće faze):** ekran rješavanja za učenika, autosave, mjerenje kvalitete zadatka
 (p, r, distraktori), papir + skenovi.

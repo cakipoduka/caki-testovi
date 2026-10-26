@@ -14,6 +14,7 @@ SECRETS: GOOGLE_SERVICE_ACCOUNT_JSON, SHEET_ID (baza zadataka), CRM_SHEET_ID, AP
 """
 import streamlit as st
 
+import analitika
 import banka
 import definicije
 import dodjele
@@ -148,6 +149,14 @@ def _dodjele():
 
 
 @st.cache_data(ttl=120, show_spinner=False)
+def _ocjene():
+    try:
+        return tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
+    except Exception:                                   # noqa: BLE001
+        return []
+
+
+@st.cache_data(ttl=120, show_spinner=False)
 def _pokusaji():
     try:
         return tablice.ucitaj(_sheet(), tablice.TAB_POKUSAJI)
@@ -245,8 +254,8 @@ with st.sidebar:
     tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
     st.caption("Tabove pripremaš u ⚙️ Postavkama (jednom, prvi put).")
 
-tab_testovi, tab_objavi, tab_rezultati, tab_ucenik, tab_postavke = st.tabs(
-    ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
+tab_testovi, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ucenik, tab_postavke = st.tabs(
+    ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
 
 
 # ------------------------------------------------------------------ 🧪 Testovi
@@ -463,6 +472,24 @@ with tab_rezultati:
                 st.warning("**Nije predalo:** " + ", ".join(nisu[:20])
                            + (" …" if len(nisu) > 20 else ""))
 
+            # --- izvoz za Excel (profesor zna raditi s tablicom)
+            import csv
+            import io
+
+            _buf = io.StringIO()
+            _pisac = csv.writer(_buf, delimiter=";")
+            _pisac.writerow(["Mjesto", "Ucenik", "Sifra", "Grupa", "Predao", "Bodovi", "Maks", "Postotak"])
+            for r in redci:
+                _pisac.writerow([r["Mj."], r["Učenik"], "", r["Grupa"], r["Predao"],
+                                 r["Bodovi"], "", r["%"]])
+            st.download_button(
+                "⬇️ Preuzmi rezultate (CSV za Excel)",
+                data=_buf.getvalue().encode("utf-8-sig"),
+                file_name=f"rezultati_{odabir_r}.csv",
+                mime="text/csv",
+                key="v2_rez_csv",
+            )
+
             # --- pregled rješenja po učeniku (profesor vidi i 🎬 video)
             st.divider()
             st.markdown("**Pregled rješenja po učeniku**")
@@ -479,6 +506,72 @@ with tab_rezultati:
                     ekran_ucenika.prikazi_pregled_rjesenja(
                         st, zadaci_r, odg,
                         pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True)
+
+
+with tab_kvaliteta:
+    upute.prikazi(st, "kvaliteta")
+    testovi_k = _testovi()
+    if not testovi_k:
+        st.info("Mjerenje počinje kad postoji test i barem nekoliko predanih radova.")
+    else:
+        opcije_k = {model.tekst(x.get("definicija_id")): x for x in testovi_k}
+        odabir_k = st.selectbox("Test", list(opcije_k),
+                                format_func=lambda i: model.tekst(opcije_k[i].get("naziv")),
+                                key="v2_kval_test")
+        d_k = opcije_k[odabir_k]
+        pok_k = [p for p in _pokusaji() if model.tekst(p.get("definicija_id")) == odabir_k]
+        ids_k = {model.tekst(p.get("pokusaj_id")) for p in pok_k}
+        ocjene_k = [o for o in _ocjene() if model.tekst(o.get("pokusaj_id")) in ids_k]
+
+        if not pok_k:
+            st.info("Još nitko nije predao ovaj test — mjerenje nema smisla bez odgovora.")
+        else:
+            izv = analitika.izracunaj(definicije.zadaci(d_k), ocjene_k, pok_k)
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Predanih", izv["ucenika"])
+            m2.metric("Prosjek bodova", f"{izv['prosjek_bodova']:g}")
+            m3.metric("Pouzdanost α", f"{izv['alfa']:g}")
+            m4.metric("Zadataka", izv["zadataka"])
+            st.caption(f"Pouzdanost: **{izv['pouzdanost']}** · medijan **{izv['medijan_bodova']:g}** · "
+                       f"raspon **{izv['raspon_bodova'][0]:g}–{izv['raspon_bodova'][1]:g}**")
+
+            for red in analitika.sazetak(izv):
+                (st.warning if red.startswith("⚠️") else st.info)(red)
+
+            ceka = sum(1 for p in pok_k if model.cijeli(p.get("ceka_provjeru"), 0) > 0)
+            if ceka:
+                st.warning(f"{ceka} pokušaja čeka ručnu provjeru — brojke su privremene.")
+
+            st.dataframe([{
+                "Zadatak": z["zadatak_id"],
+                "Tekst": z["tekst"][:60],
+                "Odgovora": z["odgovora"],
+                "p (težina)": z["p"],
+                "Ocjena težine": z["tezina"],
+                "r (diskriminacija)": z["r"],
+                "Razlikuje?": z["diskriminacija"],
+                "Preporuka": z["preporuka"],
+            } for z in izv["po_zadatku"]], hide_index=True, width="stretch")
+
+            st.markdown("**Po cjelinama (što najviše pada)**")
+            st.dataframe([{
+                "Cjelina": c["cjelina"],
+                "Zadataka": c["zadataka"],
+                "Odgovora": c["odgovora"],
+                "Točnih": c["tocnih"],
+                "p": c["p"],
+                "Udio bodova": c["udio_bodova"],
+            } for c in izv.get("po_cjelinama", [])], hide_index=True, width="stretch")
+
+            st.markdown("**Distraktori (koji su odgovori birani)**")
+            for z in izv["po_zadatku"]:
+                if not z["distraktori"]:
+                    continue
+                with st.expander(f"{z['zadatak_id']} — p={z['p']}, r={z['r']}"):
+                    for dist in z["distraktori"]:
+                        oznaka = "✅ točan" if dist["tocan"] else ("⚫ mrtav" if dist["mrtav"] else "")
+                        st.progress(min(1.0, float(dist["udio"])),
+                                    text=f"{dist['opcija'][:40]} — {dist['odabrano']}× {oznaka}")
 
 
 with tab_ucenik:

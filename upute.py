@@ -50,6 +50,22 @@ UPUTE = {
         "pazi": ["Rezultat je prazan dok učenik ne preda — „⏳” nije greška."],
         "dalje": "Mjerenje kvalitete zadatka (težina, diskriminativnost) dolazi u Fazi C.",
     },
+    "kvaliteta": {
+        "naslov": "Kako čitati mjerenje zadataka",
+        "koraci": [
+            "**p (težina)** = udio učenika koji je zadatak riješio točno. Ispod 0,30 je pretežak, "
+            "iznad 0,90 prelagan (ne razlikuje nikoga).",
+            "**r (diskriminacija)** = razlikuje li zadatak dobre od slabijih. Ispod 0,20 ne razlikuje; "
+            "**negativan** znači da bolji učenici griješe — tada je najčešće krivo označen točan odgovor.",
+            "**Distraktori** — ponuđeni odgovor koji nitko ne odabere je „mrtav”; zamijeni ga vjerojatnijim.",
+            "**Cronbach α** = pouzdanost cijelog testa; ≥ 0,70 je prihvatljivo za razredni test.",
+        ],
+        "pazi": [
+            "Manje od 10 predanih radova daje nestabilne brojke — tada se ne mijenjaju zadaci.",
+            "Ako piše da pokušaji čekaju provjeru, brojke su privremene.",
+        ],
+        "dalje": "Odluku o izmjeni zadatka donosi profesor, ne brojka.",
+    },
     "ucenik": {
         "naslov": "Kako izgleda rješavanje (i pregled)",
         "koraci": [

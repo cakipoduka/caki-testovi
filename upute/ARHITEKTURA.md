@@ -36,6 +36,8 @@
 | `unos_odgovora.py` | matematičko polje (MathLive) + fallback na tekst | — |
 | `slike_zadataka.py` | slika uz zadatak iz Drivea (bez novog paketa, keš u memoriji) | `google-auth`, `requests` |
 | `ai_pomoc.py` | 💡 pomoć: pravila „bez rješenja", max 3 pitanja, DeepSeek/Anthropic | `model` |
+| `analitika.py` | mjerenje kvalitete: p, diskriminativnost, distraktori, Cronbach α, preporuke | `model` |
+| `pages/1_Ucenik.py` | **stranica učenika**: prijava šifrom, popis testova, rješavanje, pregled | svi |
 
 ## 3. Model podataka
 

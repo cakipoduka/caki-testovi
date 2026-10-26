@@ -36,6 +36,6 @@ def unos_odgovora(label: str, key: str, vrijednost_latex: str = "",
             )
             return str(rezultat or "").strip()
         except Exception:                              # noqa: BLE001 — komponenta pukla
-            st.caption("ℹ️ Matematičko polje trenutno nije dostupno — upiši odgovor kao tekst.")
+            st.caption("Upiši odgovor kao tekst ili formulu (npr. `2x+1=5`).")
 
     return str(st.text_input(label, value=vrijednost_latex or "", key=f"{key}_tekst") or "").strip()

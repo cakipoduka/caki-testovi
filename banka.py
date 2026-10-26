@@ -79,6 +79,7 @@ ALIASI = {
     "konacan_odgovor": ("konacan_odgovor", "odgovor", "rjesenje_kratko"),
     "tip_zadatka": ("tip_zadatka", "tip"),
     "slika_putanja": ("slika_putanja", "slika"),
+    "izvor": ("biblioteka_izvora", "izvor_naziv", "izvor"),
 }
 
 
@@ -116,7 +117,7 @@ def zadatak_iz_retka(retak: dict) -> dict | None:
         "potpoglavlje": model.tekst(r.get("potpoglavlje")),
         "tezina": model.tekst(r.get("tezina")),
         "bloom": model.tekst(prvo(r, "bloom")),
-        "izvor": model.tekst(r.get("izvor_naziv")),
+        "izvor": model.tekst(prvo(r, "izvor")),
         "razred": model.tekst(r.get("razred")),
     }
 

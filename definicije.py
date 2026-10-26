@@ -349,3 +349,14 @@ def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "caki",
         except Exception:                              # noqa: BLE001
             pass
     return {**definicija, **izmjene}
+
+
+# ------------------------------------------------------------------ AI pomoć (da/ne po testu)
+
+def smije_ai(definicija: dict) -> bool:
+    """Je li AI pomoć učeniku dopuštena za OVAJ test? (Cakijeva odluka pri objavi.)
+
+    Prazno = ne — bolje da pomoć bude isključena nego da se uključi slučajno.
+    """
+    vrijednost = model.tekst((definicija or {}).get("ai_pomoc")).lower()
+    return vrijednost in ("da", "1", "true", "tocno", "točno")

@@ -230,7 +230,8 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
         # slike: može ih biti VIŠE (zarezom) — u PDF ide samo ono što je stvarno dohvaćeno
         kandidati = razdvoji_slike(z.get("slika"))
         dostupne = slike or {}
-        slike_za_pdf = [x for x in kandidati if not dostupne or x in dostupne]
+        # BEZ bajtova nema slike u PDF-u — inače pdflatex padne („File not found")
+        slike_za_pdf = [x for x in kandidati if x in dostupne]
         slika_rel = ",".join("images/" + x for x in slike_za_pdf)
         zad_lines.append(
             r"\zadatakbod{" + tekst + "}{" + video + "}{" + bodovi + "}{" + slika_rel + "}{"
@@ -429,5 +430,40 @@ def ukupno_po_kategoriji(zadaci) -> dict:
             try:
                 izlaz[kod] = izlaz.get(kod, 0.0) + broj_iz_stringa(bod)
             except (ValueError, TypeError):
+                continue
+    return izlaz
+
+
+def _slika_valjana(bajtovi: bytes) -> bool:
+    """Zaglavlje datoteke mora biti poznata slika — neispravna slika ruši pdflatex."""
+    if not bajtovi or len(bajtovi) < 12:
+        return False
+    return (bajtovi[:8] == b"\x89PNG\r\n\x1a\n"       # PNG
+            or bajtovi[:3] == b"\xff\xd8\xff"            # JPEG
+            or bajtovi[:6] in (b"GIF87a", b"GIF89a")      # GIF
+            or (bajtovi[:4] == b"RIFF" and bajtovi[8:12] == b"WEBP"))  # WebP
+
+
+def dohvati_slike(zadaci, *, folder: str = "", sa_info_dict=None) -> dict:
+    """Dohvati bajtove svih slika iz zadataka (za pdflatex).
+
+    Vraća {ime_datoteke: bajtovi}. Ako nešto ne uspije — ta slika se preskače (PDF bez nje),
+    umjesto da pdflatex padne na „File not found".
+    """
+    if not folder:
+        return {}
+    import slike_zadataka
+
+    izlaz = {}
+    for z in zadaci or []:
+        for ime in razdvoji_slike(z.get("slika")):
+            if ime in izlaz:
+                continue
+            try:
+                bajtovi = slike_zadataka.slika_bytes(ime, folder, slike_zadataka.token(sa_info_dict)) \
+                    if sa_info_dict else slike_zadataka.slika_bytes(ime, folder, "")
+                if bajtovi:
+                    izlaz[ime] = bajtovi
+            except Exception:                                  # noqa: BLE001
                 continue
     return izlaz

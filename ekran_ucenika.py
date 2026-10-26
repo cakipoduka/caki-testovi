@@ -113,8 +113,15 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
                 "Odgovor", key=_k("unos", pokusaj["pokusaj_id"], index),
                 vrijednost_latex=trenutni)
 
-    # 💡 pomoć uz ovo pitanje (bot ne daje rješenje, ograničen broj pitanja)
+    # 💡 pomoć uz ovo pitanje — samo ako je profesor dopustio za OVAJ test
     try:
+        import definicije as _def
+        _ai_smije = _def.smije_ai(definicija)
+    except Exception:                                  # noqa: BLE001
+        _ai_smije = False
+    try:
+        if not _ai_smije:
+            raise StopIteration
         ai_pomoc.prikazi_pomoc(
             st, z,
             kljuc_testa=f"{dodjela.get('dodjela_id', 'x')}_{index}",

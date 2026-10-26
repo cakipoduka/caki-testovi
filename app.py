@@ -23,6 +23,7 @@ import ekran_ucenika
 import grupe
 import izvjestaj
 import model
+import slike_zadataka
 import tablice
 import tex_test
 import upute
@@ -513,6 +514,11 @@ with tab_pdf:
                 _trajanje = o2.number_input("Trajanje (min)", 5, 240, 45, 5, key="v2p_trajanje")
                 _vrsta = o3.selectbox("Vrsta", definicije.VRSTE, key="v2p_vrsta",
                                       format_func=lambda v: definicije.VRSTA_NAZIV.get(v, v))
+                _ai_dostupan = st.toggle(
+                    "💡 AI pomoć dostupna učenicima tijekom rješavanja", value=False,
+                    key="v2p_ai",
+                    help="Ako je isključeno, učenik ne vidi blok pomoći. Ako je uključeno, bot "
+                         "pomaže **bez davanja konačnog rješenja** (najviše 3 pitanja po zadatku).")
                 _d1, _d2 = st.columns(2)
                 _rok_od = _d1.date_input("Rok od (test nije dostupan prije)", key="v2p_rok_od")
                 _rok_do = _d2.date_input("Rok do (test nije dostupan poslije)", key="v2p_rok_do")
@@ -531,6 +537,7 @@ with tab_pdf:
                             definicija_id=_novi_id, naziv=_naslov, predmet=_predmet,
                             zadaci_=_lista, trajanje_min=int(_trajanje), vrsta=_vrsta,
                             autor="caki", status="nacrt",
+                            ai_pomoc="da" if _ai_dostupan else "ne",
                             rok_od=model.iso_datum(_rok_od), rok_do=model.iso_datum(_rok_do))
                         _greske = definicije.validiraj(_d)
                         if _greske:
@@ -549,15 +556,28 @@ with tab_pdf:
                              disabled=bool(_greska_naslov) or not _lista or bool(_problemi),
                              key="v2p_generiraj"):
                     try:
+                        _slike_za_pdf = {}
+                        try:
+                            _folderi = slike_zadataka.folder_kandidati(st.secrets)
+                            _racuni = slike_zadataka.sa_kandidati(st.secrets)
+                            if _folderi and _racuni:
+                                _slike_za_pdf = tex_test.dohvati_slike(
+                                    _lista, folder=_folderi[0], sa_info_dict=_racuni[0])
+                                if _slike_za_pdf:
+                                    st.caption(f"🖼️ U PDF ide **{len(_slike_za_pdf)}** slika "
+                                               "(ostale se preskaču da PDF ne padne).")
+                        except Exception:                   # noqa: BLE001
+                            _slike_za_pdf = {}
                         _pdf = tex_test.generiraj(naziv=_naslov, zadaci=_lista, datum=_datum,
-                                                  tip=_tipd, ukljuci_rjesenja=_rjesenja)
+                                                  tip=_tipd, ukljuci_rjesenja=_rjesenja,
+                                                  slike=_slike_za_pdf)
                         st.success(f"PDF generiran ({len(_pdf) // 1024} KB).")
                         st.download_button("⬇️ Preuzmi PDF", data=_pdf,
                                            file_name=tex_test.ime_datoteke(_naslov),
                                            mime="application/pdf", key="v2p_preuzmi")
-                    except Exception as _e:                 # noqa: BLE001 — nikad ne ruši karticu
+                    except Exception as _e:                 # noqa: BLE001
                         st.error(f"PDF nije generiran: {_e}")
-        except Exception as _e:                         # noqa: BLE001
+        except Exception as _e:                             # noqa: BLE001
             st.error(f"Kartica PDF-a trenutno ne radi: {_e}")
 
 
@@ -606,6 +626,19 @@ with tab_objavi:
                                   placeholder="AA1111, BB2222")
             ucenici = [{"ucenik_id": s.strip().upper()} for s in model.tekst(sifre).split(",") if s.strip()]
 
+        _upis_ok = bool(tablice.PISANJE)
+        if not _upis_ok:
+            st.warning("Upis u bazu je ISKLJUČEN — uključi ga u bočnoj traci. "
+                       "Bez toga se test ne može objaviti.")
+        if ucenici:
+            _prvih = ", ".join(model.tekst(u.get("ucenik_id")) for u in ucenici[:5])
+            st.caption(f"Učenika prepoznato: {len(ucenici)} ({_prvih}"
+                       + (" …)" if len(ucenici) > 5 else ")"))
+        else:
+            st.caption("Učenika prepoznato: 0 — upiši šifru (npr. TEST01).")
+        st.caption(f"Upis u bazu: {'uključen' if _upis_ok else 'isključen'}")
+
+
         if st.button("📤 Objavi", type="primary", disabled=not ucenici, key="v2_obj_gumb"):
             try:
                 rez = dodjele.dodaj(_sheet(), d, ucenici, grupa=grupa_naziv, dodijelio="caki")
@@ -616,7 +649,12 @@ with tab_objavi:
                               if rez["preskoceno"] else ""))
                 _osvjezi()
             except Exception as e:                      # noqa: BLE001
-                st.error(f"Nije uspjelo: {e}")
+                st.error(f"Objava nije uspjela — **{type(e).__name__}**: {e}")
+                with st.expander("Što provjeriti"):
+                    st.caption("· je li upis uključen (bočna traka)")
+                    st.caption("· postoji li tab `Dodjele` (⚙️ Postavke → Pripremi tabove)")
+                    st.caption("· ima li test zadatke i je li spremljen")
+                    st.caption("· je li šifra upisana (npr. TEST01)")
 
         moje = [x for x in _dodjele() if model.tekst(x.get("definicija_id")) == odabir_t]
         if moje:

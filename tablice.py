@@ -47,7 +47,7 @@ ZAGLAVLJA = {
         "definicija_id", "ustanova_id", "naziv", "predmet", "razina", "vrsta",
         "zadaci_json", "broj_zadataka", "bodovi_ukupno", "trajanje_min",
         "rok_od", "rok_do", "status", "student_view_json", "varijanta_pravilo",
-        "pdf_verzija", "autor", "kreirano", "napomena",
+        "pdf_verzija", "autor", "kreirano", "napomena", "ai_pomoc",
     ],
     TAB_DODJELE: [
         "dodjela_id", "definicija_id", "ucenik_id", "ime_djeteta", "grupa",

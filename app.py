@@ -400,8 +400,18 @@ with tab_pdf:
                 _info = builder.stranica(_nadeni, 0, _velicina)
             st.caption(builder.tekst_stranice(_info))
 
-            # --- odabir zadataka (kartice s formulama)
+            # --- prikaz slika u popisu (kao u starom builderu)
+            _prikazi_slike = st.toggle("🖼️ Prikaži slike zadataka u popisu", value=True,
+                                       key="v2p_prikazi_slike",
+                                       help="Isključi ako je popis spor ili ako slike nisu potrebne.")
             _odabrani = st.session_state.setdefault("v2p_odabrani", {})
+            if st.button(f"➕ Dodaj sve prikazane ({len(_info['zadaci'])})", key="v2p_dodaj_sve"):
+                for _zz in _info["zadaci"]:
+                    _zid_s = model.tekst(_zz.get("id"))
+                    if _zid_s:
+                        st.session_state[f"v2p_chk_{_zid_s}"] = True
+                        _odabrani[_zid_s] = _zz
+                st.rerun()
             for _z in _info["zadaci"]:
                 _zid = model.tekst(_z.get("id"))
                 with st.container(border=True):
@@ -410,6 +420,11 @@ with tab_pdf:
                     c2.checkbox("dodaj", key=f"v2p_chk_{_zid}", label_visibility="collapsed")
                     st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:700])
                     st.caption(" · ".join(builder.oznake(_z)))
+                    if _prikazi_slike and model.tekst(_z.get("slika")):
+                        try:
+                            slike_zadataka.prikazi_sliku_zadatka(st, _z.get("slika"))
+                        except Exception:               # noqa: BLE001 — slika ne blokira popis
+                            st.caption("🖼️ slika se ne može prikazati")
                     if st.session_state.get(f"v2p_chk_{_zid}"):
                         _odabrani[_zid] = _z
                     else:

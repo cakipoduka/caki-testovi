@@ -22,3 +22,7 @@ env/
 *.bak
 .DS_Store
 Thumbs.db
+
+# generirani izvještaji i primjeri (ne idu u repo)
+primjer_izvjestaj.pdf
+*_izvjestaj.pdf

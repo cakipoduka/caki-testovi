@@ -67,30 +67,55 @@ def _opcije(retak: dict) -> list[str]:
     return [d for d in ocisceno if d]
 
 
+
+# ------------------------------------------------------------------ aliasi stupaca
+
+# Baza je mijenjana kroz vrijeme (i drugi agent je radi), pa isti podatak ima različita imena.
+# Umjesto tvrdog naziva — **prvi koji postoji**. Tako radi i sa starom i s novom shemom.
+ALIASI = {
+    "bodovi": ("bodovi", "max_bodovi", "poeni", "bod", "vrijednost_bodova"),
+    "bloom": ("bloom", "bloom_razina", "kognitivna_razina", "kognitivno"),
+    "tekst_zadatka_latex": ("tekst_zadatka_latex", "tekst_zadatka_mathjax", "tekst"),
+    "konacan_odgovor": ("konacan_odgovor", "odgovor", "rjesenje_kratko"),
+    "tip_zadatka": ("tip_zadatka", "tip"),
+    "slika_putanja": ("slika_putanja", "slika"),
+}
+
+
+def prvo(retak: dict, kljuc: str, zadano=""):
+    """Prva neprazna vrijednost među aliasima za `kljuc` (npr. `bodovi` ili `max_bodovi`)."""
+    r = retak or {}
+    for ime in ALIASI.get(kljuc, (kljuc,)):
+        vrijednost = model.tekst(r.get(ime))
+        if vrijednost:
+            return r.get(ime)
+    return zadano
+
+
 def zadatak_iz_retka(retak: dict) -> dict | None:
     """Bazin redak → zamrznuti zadatak za test. None ako zadatak nije upotrebljiv."""
     r = retak or {}
     zid = model.tekst(r.get("id"))
-    tekst = model.tekst(r.get("tekst_zadatka_latex")) or model.tekst(r.get("tekst"))
+    tekst = model.tekst(prvo(r, "tekst_zadatka_latex"))
     if not zid or not tekst:
         return None
-    odgovor = model.tekst(r.get("konacan_odgovor"))
+    odgovor = model.tekst(prvo(r, "konacan_odgovor"))
     opcije = _opcije(r)
-    visestruki = (model.tekst(r.get("tip_zadatka")) == "visestruki_izbor" and len(opcije) >= 2)
+    visestruki = (model.tekst(prvo(r, "tip_zadatka")) == "visestruki_izbor" and len(opcije) >= 2)
     return {
         "id": zid,
         "tekst": tekst,
         "tip": "visestruki_izbor" if visestruki else "kratki_odgovor",
         "opcije": opcije if visestruki else [],
         "odgovor": odgovor,
-        "bodovi": model.broj(r.get("bodovi"), 1) or 1,
-        "slika": model.tekst(r.get("slika_putanja")) or model.tekst(r.get("slika")),
+        "bodovi": model.broj(prvo(r, "bodovi", 1), 1) or 1,
+        "slika": model.tekst(prvo(r, "slika_putanja")),
         "video_url": model.tekst(r.get(STUPAC_VIDEO)),
         "video_naslov": model.tekst(r.get(STUPAC_VIDEO_NASLOV)),
         "cjelina": model.tekst(r.get("cjelina")),
         "potpoglavlje": model.tekst(r.get("potpoglavlje")),
         "tezina": model.tekst(r.get("tezina")),
-        "bloom": model.tekst(r.get("bloom")),
+        "bloom": model.tekst(prvo(r, "bloom")),
         "izvor": model.tekst(r.get("izvor_naziv")),
         "razred": model.tekst(r.get("razred")),
     }
@@ -117,10 +142,20 @@ def po_id(zadaci: list[dict]) -> dict[str, dict]:
 
 # Stupci koje v2 STVARNO čita iz taba `Zadaci`. Ako se neki preimenuje ili obriše,
 # `provjeri_shemu()` to javi — bolje nego da polja tiho postanu prazna.
-STUPCI_KOJE_CITAMO = [
-    "id", "tekst_zadatka_latex", "tip_zadatka", "ponudjeni_odgovori", "konacan_odgovor",
-    "bodovi", "slika_putanja", "cjelina", "potpoglavlje", "tezina", "bloom", "video_url",
-]
+# STVARNO obavezno: bez ovoga zadatak nije upotrebljiv.
+STUPCI_KOJE_CITAMO = ["id", "tekst_zadatka_latex", "konacan_odgovor"]
+# Poželjno, ali se čita kroz aliasе (npr. `max_bodovi` umjesto `bodovi`) — ne blokira rad.
+STUPCI_S_ALIASIMA = {
+    "bodovi": ALIASI["bodovi"],
+    "bloom": ALIASI["bloom"],
+    "tip_zadatka": ALIASI["tip_zadatka"],
+    "ponudjeni_odgovori": ("ponudjeni_odgovori",),
+    "slika_putanja": ALIASI["slika_putanja"],
+    "cjelina": ("cjelina",),
+    "potpoglavlje": ("potpoglavlje",),
+    "tezina": ("tezina",),
+    "video_url": ("video_url",),
+}
 # Neobavezni (ako ih nema, sustav radi dalje)
 STUPCI_NEOBAVEZNI = ["uloga", "izvor_naziv", "razred", "max_bodovi", "rjesenje"]
 
@@ -137,11 +172,14 @@ def provjeri_shemu(sheet) -> dict:
         return {"postoji": False, "stupaca": 0, "nedostaju": list(STUPCI_KOJE_CITAMO),
                 "neobavezni_nedostaju": list(STUPCI_NEOBAVEZNI), "zaglavlje": []}
     ima = set(zagl)
+    # nedostaje = nema ni jedan od aliasa
+    nedostaju = [s for s in STUPCI_KOJE_CITAMO if s not in ima]
+    bez_aliasa = [k for k, imena in STUPCI_S_ALIASIMA.items() if not any(i in ima for i in imena)]
     return {
         "postoji": True,
         "stupaca": len(zagl),
-        "nedostaju": [s for s in STUPCI_KOJE_CITAMO if s not in ima],
-        "neobavezni_nedostaju": [s for s in STUPCI_NEOBAVEZNI if s not in ima],
+        "nedostaju": nedostaju,
+        "neobavezni_nedostaju": bez_aliasa,
         "zaglavlje": zagl,
     }
 

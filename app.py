@@ -426,6 +426,14 @@ with tab_pdf:
                                 _odabrani[_zid] = _z
                                 st.rerun()
                         st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:900])
+                        _opcije_z = [model.tekst(o) for o in (_z.get("opcije") or [])
+                                     if model.tekst(o)]
+                        if _opcije_z:
+                            _slova = [chr(65 + i) for i in range(len(_opcije_z))]
+                            _red = " &nbsp;&nbsp; ".join(
+                                f"**{_slova[i]})** {builder.pripremi_za_prikaz(o)}"
+                                for i, o in enumerate(_opcije_z))
+                            st.markdown(_red)
                         st.caption(" · ".join(builder.oznake(_z)))
                         if _prikazi_slike and model.tekst(_z.get("slika")):
                             try:
@@ -464,7 +472,7 @@ with tab_pdf:
                             if d4.button("✕", key=f"v2p_del_{_zid_d}", help="ukloni"):
                                 _odabrani.pop(_zid_d, None)
                                 st.rerun()
-                            d1.caption(builder.kratki_tekst(_zd, 70))
+                            d1.markdown(builder.pripremi_za_prikaz(_zd.get("tekst"))[:220], unsafe_allow_html=True)
                             with st.expander("⚙️ Detalji zadatka"):
                                 _bloom = st.selectbox(
                                     "🧠 Bloom razina (za analizu napretka)",
@@ -496,8 +504,8 @@ with tab_pdf:
 
                 with st.expander("🩺 Zašto se slike ne vide"):
                     try:
-                        _folderi = slike_zadataka.folder_kandidati(st.secrets)
-                        _racuni = slike_zadataka.sa_kandidati(st.secrets)
+                        _folderi = slike_zadataka.folder_kandidati(st)
+                        _racuni = slike_zadataka.sa_kandidati(st)
                         st.caption(f"· Foldera u Secrets: **{len(_folderi)}**"
                                    + (" (`SLIKE_FOLDER_ID`: " + _folderi[0][:12] + "…)"
                                       if _folderi else " — dodaj `SLIKE_FOLDER_ID`"))
@@ -600,8 +608,8 @@ with tab_pdf:
                     try:
                         _slike_za_pdf = {}
                         try:
-                            _folderi = slike_zadataka.folder_kandidati(st.secrets)
-                            _racuni = slike_zadataka.sa_kandidati(st.secrets)
+                            _folderi = slike_zadataka.folder_kandidati(st)
+                            _racuni = slike_zadataka.sa_kandidati(st)
                             if _folderi and _racuni:
                                 _slike_za_pdf = tex_test.dohvati_slike(
                                     _lista, folder=_folderi[0], sa_info_dict=_racuni[0])

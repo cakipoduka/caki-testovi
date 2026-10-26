@@ -46,6 +46,17 @@ def ucitaj(sheet) -> list[dict]:
     return tablice.ucitaj(sheet, TAB_ZADACI)
 
 
+def _zakrpi_latex(tekst: str) -> str:
+    """Udvostruči pojedinačne backslashe da JSON ne pojede `\\frac`, `\\alpha`…"""
+    import re
+
+    return re.sub(r"(?<!\\)\\(?!\\)", r"\\\\", tekst)
+
+
+def _ima_kontrolne(tekst: str) -> bool:
+    return any(ord(z) < 32 and z not in "\n\r\t" for z in str(tekst or ""))
+
+
 def _opcije(retak: dict) -> list[str]:
     """Ponuđeni odgovori u svim oblicima: JSON lista, Python lista, `;`, prijelomi, „A) …”.
 
@@ -59,21 +70,22 @@ def _opcije(retak: dict) -> list[str]:
     if not tekst:
         return []
 
-    # 1) JSON lista
+    # 1) JSON lista — UVIJEK preko `_zakrpi_latex` (JSON inače pojede `\frac`, `\alpha`…)
     import json
 
     for pokusaj in (tekst, tekst.replace("'", '"')):
-        try:
-            podaci = json.loads(pokusaj)
-        except Exception:                              # noqa: BLE001
-            podaci = None
-        if isinstance(podaci, list):
-            ocisceno = [model.tekst(o) for o in podaci if model.tekst(o)]
-            if ocisceno:
-                return ocisceno
-        elif isinstance(podaci, str) and podaci.strip() and podaci != tekst:
-            tekst = podaci.strip()
-            break
+        for kandidat in (_zakrpi_latex(pokusaj), pokusaj):
+            try:
+                podaci = json.loads(kandidat)
+            except Exception:                          # noqa: BLE001
+                podaci = None
+            if isinstance(podaci, list):
+                ocisceno = [model.tekst(o) for o in podaci if model.tekst(o)]
+                if ocisceno and not any(_ima_kontrolne(o) for o in ocisceno):
+                    return ocisceno
+            elif isinstance(podaci, str) and podaci.strip() and podaci != tekst:
+                tekst = pokusaj = podaci.strip()
+                break
 
     # 2) Python literal (npr. "['x=1', 'x=2']")
     import ast

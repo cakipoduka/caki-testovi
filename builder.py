@@ -19,21 +19,41 @@ ZADANA_VELICINA = 20
 
 # ------------------------------------------------------------------ filtri
 
-def filtriraj(zadaci: list[dict], *, tekst: str = "", cjelina: str = "", potpoglavlje: str = "",
-              tezina: str = "", tip: str = "", izvor: str = "") -> list[dict]:
-    """Sve filtrirajuće polja su neobavezna; prazno polje ne filtrira."""
+def _kao_lista(vrijednost) -> list[str]:
+    """Filter može biti string, lista ili prazno — uvijek vrati listu nepraznih stringova."""
+    if vrijednost is None:
+        return []
+    if isinstance(vrijednost, (list, tuple, set)):
+        return [model.tekst(v) for v in vrijednost if model.tekst(v)]
+    return [model.tekst(vrijednost)] if model.tekst(vrijednost) else []
+
+
+def _odgovara(vrijednost, filteri) -> bool:
+    """Prazan filter propušta sve; inače vrijednost mora biti među odabranima."""
+    odabrano = _kao_lista(filteri)
+    if not odabrano:
+        return True
+    return model.tekst(vrijednost) in odabrano
+
+
+def filtriraj(zadaci: list[dict], *, tekst: str = "", cjelina="", potpoglavlje="",
+              tezina="", tip="", izvor="") -> list[dict]:
+    """Filtrira zadatke; svaki filter može biti **jedna vrijednost ili lista** (višestruki izbor).
+
+    Primjer: `filtriraj(zadaci, cjelina=["Linearne", "Razlomci"], tezina=["lako"])`.
+    """
     trazeno = model.tekst(tekst).lower()
     izlaz = []
     for z in (zadaci or []):
-        if cjelina and model.tekst(z.get("cjelina")) != cjelina:
+        if not _odgovara(z.get("cjelina"), cjelina):
             continue
-        if potpoglavlje and model.tekst(z.get("potpoglavlje")) != potpoglavlje:
+        if not _odgovara(z.get("potpoglavlje"), potpoglavlje):
             continue
-        if tezina and model.tekst(z.get("tezina")) != tezina:
+        if not _odgovara(z.get("tezina"), tezina):
             continue
-        if tip and model.tekst(z.get("tip")) != tip:
+        if not _odgovara(z.get("tip"), tip):
             continue
-        if izvor and model.tekst(z.get("izvor")) != izvor:
+        if not _odgovara(z.get("izvor"), izvor):
             continue
         if trazeno:
             polje = " ".join([model.tekst(z.get("id")), model.tekst(z.get("tekst")),
@@ -49,9 +69,11 @@ def vrijednosti(zadaci: list[dict], polje: str) -> list[str]:
     return sorted({model.tekst(z.get(polje)) for z in (zadaci or []) if model.tekst(z.get(polje))})
 
 
-def potpoglavlja_za(zadaci: list[dict], cjelina: str = "") -> list[str]:
-    """Potpoglavlja unutar odabrane cjeline (ili sva, ako cjelina nije odabrana)."""
-    izvor = [z for z in (zadaci or []) if not cjelina or model.tekst(z.get("cjelina")) == cjelina]
+def potpoglavlja_za(zadaci: list[dict], cjelina="") -> list[str]:
+    """Potpoglavlja unutar odabranih cjelina (ili sva, ako cjelina nije odabrana)."""
+    odabrane = _kao_lista(cjelina)
+    izvor = [z for z in (zadaci or [])
+             if not odabrane or model.tekst(z.get("cjelina")) in odabrane]
     return vrijednosti(izvor, "potpoglavlje")
 
 

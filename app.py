@@ -16,6 +16,7 @@ import streamlit as st
 
 import analitika
 import banka
+import builder
 import definicije
 import dodjele
 import ekran_ucenika
@@ -23,6 +24,7 @@ import grupe
 import izvjestaj
 import model
 import tablice
+import tex_test
 import upute
 import zakljucna
 from veza import sheet_baze, sheet_crm
@@ -256,8 +258,8 @@ with st.sidebar:
     tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
     st.caption("Tabove pripremaš u ⚙️ Postavkama (jednom, prvi put).")
 
-tab_testovi, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
-    ["🧪 Testovi", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🎓 Ocjene",
+tab_testovi, tab_pdf, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
+    ["🧪 Testovi", "📄 PDF testa", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🎓 Ocjene",
      "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
 
 
@@ -358,6 +360,112 @@ with tab_testovi:
 
 
 # ------------------------------------------------------------------ 👥 Objavi
+
+with tab_pdf:
+    upute.prikazi(st, "pdf")
+    st.caption("Složi test iz baze i generiraj **PDF** — isti stilovi kao u starom Test Builderu.")
+
+    _zadaci_pdf = _zadaci()
+    if not _zadaci_pdf:
+        st.warning("Baza se ne može pročitati ili je prazna → ⚙️ Postavke → 🩺 Provjera baze.")
+    else:
+        try:
+            # --- filtri (VIŠESTRUKI izbor)
+            f1, f2, f3 = st.columns(3)
+            _cjeline = f1.multiselect("Cjelina", builder.vrijednosti(_zadaci_pdf, "cjelina"),
+                                      key="v2p_cjeline")
+            _potp = f2.multiselect("Potpoglavlje", builder.potpoglavlja_za(_zadaci_pdf, _cjeline),
+                                   key="v2p_potp")
+            _tezine = f3.multiselect("Težina", builder.vrijednosti(_zadaci_pdf, "tezina"),
+                                     key="v2p_tezine")
+
+            f4, f5, f6 = st.columns(3)
+            _izvori = f4.multiselect("Biblioteka izvora", builder.vrijednosti(_zadaci_pdf, "izvor"),
+                                     key="v2p_izvori")
+            _tipovi = f5.multiselect("Tip zadatka", builder.vrijednosti(_zadaci_pdf, "tip"),
+                                     key="v2p_tipovi")
+            _trazi = f6.text_input("Traži u tekstu / ID-u", key="v2p_trazi")
+
+            _nadeni = builder.filtriraj(_zadaci_pdf, tekst=_trazi, cjelina=_cjeline,
+                                        potpoglavlje=_potp, tezina=_tezine, tip=_tipovi,
+                                        izvor=_izvori)
+
+            # --- stranice 20/30/40 (ne učitavamo sve odjednom)
+            s1, s2 = st.columns([2, 1])
+            _velicina = s1.radio("Zadataka po stranici", builder.VELICINE_STRANICE, horizontal=True,
+                                 index=0, key="v2p_velicina")
+            _info = builder.stranica(_nadeni, int(st.session_state.get("v2p_stranica", 0)), _velicina)
+            if s2.button("↻ Prva stranica", key="v2p_prva"):
+                st.session_state["v2p_stranica"] = 0
+                _info = builder.stranica(_nadeni, 0, _velicina)
+            st.caption(builder.tekst_stranice(_info))
+
+            # --- odabir zadataka (kartice s formulama)
+            _odabrani = st.session_state.setdefault("v2p_odabrani", {})
+            for _z in _info["zadaci"]:
+                _zid = model.tekst(_z.get("id"))
+                with st.container(border=True):
+                    c1, c2 = st.columns([5, 1])
+                    c1.markdown(f"**{builder.naslov_kartice(_z)}**")
+                    c2.checkbox("dodaj", key=f"v2p_chk_{_zid}", label_visibility="collapsed")
+                    st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:700])
+                    st.caption(" · ".join(builder.oznake(_z)))
+                    if st.session_state.get(f"v2p_chk_{_zid}"):
+                        _odabrani[_zid] = _z
+                    else:
+                        _odabrani.pop(_zid, None)
+
+            n1, n2 = st.columns([2, 1])
+            if n1.button("◀ Prethodna stranica", disabled=_info["stranica"] == 0, key="v2p_prev"):
+                st.session_state["v2p_stranica"] = max(0, _info["stranica"] - 1)
+                st.rerun()
+            if n2.button("Sljedeća ▶", disabled=_info["stranica"] + 1 >= _info["stranica_ukupno"],
+                         key="v2p_next"):
+                st.session_state["v2p_stranica"] = _info["stranica"] + 1
+                st.rerun()
+
+            st.divider()
+            _lista = list(_odabrani.values())
+            _saz = builder.sazetak(_lista)
+            st.markdown(f"**Odabrano: {_saz['zadataka']} zadataka · {_saz['bodova']:g} bodova**")
+            if _lista and st.button("🧹 Očisti odabir", key="v2p_ocisti"):
+                st.session_state["v2p_odabrani"] = {}
+                st.rerun()
+
+            # --- metapodaci i PDF
+            m1, m2, m3 = st.columns(3)
+            _naslov = m1.text_input("Naslov testa (obavezno)", key="v2p_naslov",
+                                    placeholder="npr. Kvadratna jednadžba — 1. provjera")
+            _datum = m2.text_input("Datum", value=model.sada().strftime("%d.%m.%Y."), key="v2p_datum")
+            _tipd = m3.selectbox("Tip dokumenta", tex_test.TIP_DOKUMENTA, key="v2p_tipd")
+            _rjesenja = st.checkbox("Uključi rješenja na kraju dokumenta", key="v2p_rjesenja")
+
+            _greska_naslov = builder.provjeri_naslov(_naslov)
+            if _greska_naslov:
+                st.caption("✏️ " + _greska_naslov)
+
+            _problemi = tex_test.provjeri_kategorije(_lista) if _lista else []
+            if _problemi:
+                for _pr in _problemi:
+                    st.warning(_pr)
+                st.caption("🚫 **PDF je blokiran** dok se zbroj po kategorijama ne uskladi s bodovima "
+                           "(isto pravilo kao u starom builderu).")
+
+            if st.button("📄 Generiraj PDF testa", type="primary",
+                         disabled=bool(_greska_naslov) or not _lista or bool(_problemi),
+                         key="v2p_generiraj"):
+                try:
+                    _pdf = tex_test.generiraj(naziv=_naslov, zadaci=_lista, datum=_datum,
+                                              tip=_tipd, ukljuci_rjesenja=_rjesenja)
+                    st.success(f"PDF generiran ({len(_pdf) // 1024} KB).")
+                    st.download_button("⬇️ Preuzmi PDF", data=_pdf,
+                                       file_name=tex_test.ime_datoteke(_naslov),
+                                       mime="application/pdf", key="v2p_preuzmi")
+                except Exception as _e:                 # noqa: BLE001 — nikad ne ruši karticu
+                    st.error(f"PDF nije generiran: {_e}")
+        except Exception as _e:                         # noqa: BLE001
+            st.error(f"Kartica PDF-a trenutno ne radi: {_e}")
+
 
 with tab_objavi:
     upute.prikazi(st, "objavi")

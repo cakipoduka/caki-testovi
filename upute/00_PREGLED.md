@@ -17,7 +17,8 @@ arhitektura. Ista praksa kao za razvoj CRM-a (`CAKI_razvoj/upute/`), samo što o
 
 ## Kako se piše izvještaj (pravilo)
 
-1. **Naziv:** `UPDATE_DD-MM_kratka_tema.md` (npr. `UPDATE_25-10_fazaA_temelj.md`).
+1. **Prvo provjeri stari kod** (`PRAVILO_preuzmi_stari_kod.md`) i u izvještaju napiši odjeljak **„Preuzeto / novo”** — što je preuzeto, a što napisano i zašto.
+2. **Naziv:** `UPDATE_DD-MM_kratka_tema.md` (npr. `UPDATE_25-10_fazaA_temelj.md`).
 2. **Obavezni dijelovi:** status · što je napravljeno · odluke ugrađene · bugovi nađeni i popravljeni ·
    testovi (broj) · **što Caki treba napraviti** · što je sljedeće.
 3. **Ne prepisuje se povijest.** Ako se nešto promijeni, dodaje se nova datoteka i unos u `DNEVNIK.md`.

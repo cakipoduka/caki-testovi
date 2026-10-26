@@ -7,6 +7,21 @@ Svaka uputa: naslov · numerirani koraci · ⚠️ Pazi · ➡️ gdje dalje.
 from __future__ import annotations
 
 UPUTE = {
+    "pdf": {
+        "naslov": "Kako složiti i ispisati test (PDF)",
+        "koraci": [
+            "Filtriraj bazu — **možeš odabrati više cjelina, potpoglavlja, težina i izvora odjednom**.",
+            "Listaj stranice po **20/30/40** zadataka (ne učitava sve odjednom).",
+            "Kvačicom dodaj zadatke; gore piše koliko je odabrano i koliko bodova nose.",
+            "Upiši **naslov** (obavezan), datum i tip dokumenta; po želji uključi rješenja.",
+            "**📄 Generiraj PDF testa** — isti stilovi kao u starom Test Builderu.",
+        ],
+        "pazi": [
+            "Ako zadatak ima kategorije (UZV/RP/MK), **zbroj mora biti jednak bodovima** — inače je PDF blokiran.",
+            "Formule se prikazuju kao formule (ne kao LaTeX kod).",
+        ],
+        "dalje": "PDF se ispisuje ili šalje; za online test koristi 👥 Objavi.",
+    },
     "testovi": {
         "naslov": "Kako sastaviti test (i zašto je zadano „nacrt”)",
         "koraci": [

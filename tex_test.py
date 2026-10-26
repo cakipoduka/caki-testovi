@@ -204,7 +204,7 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
         video = model.tekst(z.get("video_url")).strip()
         bodovi = f"{model.broj(z.get('bodovi'), 1):g}"
         tip_z = model.tekst(z.get("tip"))
-        kategorije_tex = izgradi_kategorije_tex({})
+        kategorije_tex = izgradi_kategorije_tex(z.get("kategorije") or {})
 
         opcije = [model.tekst(o) for o in (z.get("opcije") or []) if model.tekst(o)]
         if opcije:
@@ -295,6 +295,11 @@ def generiraj(*, naziv: str, zadaci: list, datum: str = "", tip: str = TIP_DOKUM
     problemi = _upozorenja(zadaci)
     if problemi:
         raise RuntimeError("Prije kompajliranja: " + " ".join(problemi))
+    # kategorije vrednovanja (UZV/RP/MK): zbroj mora odgovarati bodovima — inače nema PDF-a
+    problemi_k = provjeri_kategorije(zadaci)
+    if problemi_k:
+        raise RuntimeError("Zbroj po kategorijama se ne usklađuje s bodovima — PDF nije generiran.\n"
+                           + "\n".join(problemi_k))
     if not ima_pdflatex():
         raise RuntimeError("pdflatex nije instaliran u ovoj okolini "
                            "(na Streamlit Cloudu se instalira iz `packages.txt`).")
@@ -306,6 +311,7 @@ def generiraj(*, naziv: str, zadaci: list, datum: str = "", tip: str = TIP_DOKUM
         datum=model.tekst(datum) or model.sada().strftime("%d.%m.%Y."),
         tip=tip,
         ukupno_bodova=f"{ukupno:g}",
+        kategorije_redovi=izgradi_kategorije_redovi(ukupno_po_kategoriji(zadaci)),
         predmet_zaglavlje=predmet_zaglavlje,
         rjesenja_sekcija=(r"\input{generated/rjesenja_body}" if ukljuci_rjesenja else ""),
     )
@@ -351,3 +357,47 @@ def prikazi_preuzimanje(st, *, naziv: str, zadaci: list, datum: str = "",
         return
     st.download_button("📄 Generiraj PDF testa", data=sadrzaj, file_name=ime_datoteke(naziv),
                        mime="application/pdf", key="v2_tex_" + (kljuc or "x"))
+
+
+# ------------------------------------------------------------------ kategorije vrednovanja (UZV/RP/MK)
+
+def zbroj_kategorija(zadatak: dict) -> float:
+    """Zbroj bodova po kategorijama za jedan zadatak (0 ako kategorija nema)."""
+    zbroj = 0.0
+    for _kod, bod in (zadatak.get("kategorije") or {}).items():
+        try:
+            zbroj += broj_iz_stringa(bod)
+        except (ValueError, TypeError):
+            continue
+    return zbroj
+
+
+def provjeri_kategorije(zadaci) -> list[str]:
+    """BLOKIRAJUĆA provjera (preuzeto pravilo 25.8.2026.): kad zadatak ima ijednu kategoriju,
+    zbroj bodova po kategorijama mora **točno** odgovarati polju „Bodovi" — inače nema PDF-a.
+
+    Zadaci bez ijedne kategorije se ne provjeravaju (kategorizacija je opcionalna).
+    """
+    problemi = []
+    for i, z in enumerate(zadaci or [], start=1):
+        if not z.get("kategorije"):
+            continue
+        bodovi = model.broj(z.get("bodovi"), 0)
+        zbroj = zbroj_kategorija(z)
+        if abs(zbroj - bodovi) > 1e-9:
+            problemi.append(
+                f"Zadatak {i} ({model.tekst(z.get('id')) or 'ručni'}): zbroj po kategorijama "
+                f"{zbroj:g} ≠ bodovi {bodovi:g}.")
+    return problemi
+
+
+def ukupno_po_kategoriji(zadaci) -> dict:
+    """Zbroj bodova po kategoriji preko svih zadataka — za zaglavlje PDF-a (`izgradi_kategorije_redovi`)."""
+    izlaz: dict[str, float] = {}
+    for z in zadaci or []:
+        for kod, bod in (z.get("kategorije") or {}).items():
+            try:
+                izlaz[kod] = izlaz.get(kod, 0.0) + broj_iz_stringa(bod)
+            except (ValueError, TypeError):
+                continue
+    return izlaz

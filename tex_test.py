@@ -222,7 +222,7 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
         kategorije_tex = izgradi_kategorije_tex(z.get("kategorije") or {})
 
         opcije = [model.tekst(o) for o in (z.get("opcije") or []) if model.tekst(o)]
-        if opcije:
+        if opcije and z.get("prikazi_opcije", True) is not False:
             if dodaj_mamac and model.tekst(mamac_tekst):
                 opcije = opcije + [model.tekst(mamac_tekst)]
             tekst += izgradi_opcije_blok(opcije)

@@ -438,19 +438,61 @@ with tab_pdf:
             with _desno:
                 st.markdown(f"### 📋 Odabrano ({len(_odabrani)})")
                 if not _odabrani:
-                    st.caption("Nema odabranih zadataka. Dodaj ih gumbom ➕ lijevo.")
+                    st.caption("Nema odabranih zadataka. Dodaj ih gumbom lijevo.")
                 else:
                     _ukupno_bod = sum(model.broj(z.get("bodovi"), 1) for z in _odabrani.values())
                     st.caption(f"Ukupno **{_ukupno_bod:g}** bodova.")
-                    for _zid_d, _zd in list(_odabrani.items()):
+                    _redoslijed = list(_odabrani)
+                    for _poz, _zid_d in enumerate(_redoslijed):
+                        _zd = _odabrani[_zid_d]
                         with st.container(border=True):
-                            d1, d2 = st.columns([4, 1])
+                            d1, d2, d3, d4 = st.columns([4, 1, 1, 1])
                             d1.markdown(f"**{model.tekst(_zd.get('id'))}** · "
                                         f"{model.broj(_zd.get('bodovi'), 1):g} bod.")
-                            if d2.button("✕", key=f"v2p_del_{_zid_d}", help="ukloni iz odabira"):
+                            if d2.button("↑", key=f"v2p_gore_{_zid_d}", help="pomakni gore",
+                                         disabled=_poz == 0):
+                                _novi = _redoslijed[:]
+                                _novi[_poz - 1], _novi[_poz] = _novi[_poz], _novi[_poz - 1]
+                                st.session_state["v2p_odabrani"] = {k: _odabrani[k] for k in _novi}
+                                st.rerun()
+                            if d3.button("↓", key=f"v2p_dolje_{_zid_d}", help="pomakni dolje",
+                                         disabled=_poz == len(_redoslijed) - 1):
+                                _novi = _redoslijed[:]
+                                _novi[_poz + 1], _novi[_poz] = _novi[_poz], _novi[_poz + 1]
+                                st.session_state["v2p_odabrani"] = {k: _odabrani[k] for k in _novi}
+                                st.rerun()
+                            if d4.button("✕", key=f"v2p_del_{_zid_d}", help="ukloni"):
                                 _odabrani.pop(_zid_d, None)
                                 st.rerun()
                             d1.caption(builder.kratki_tekst(_zd, 70))
+                            with st.expander("⚙️ Detalji zadatka"):
+                                _bloom = st.selectbox(
+                                    "🧠 Bloom razina (za analizu napretka)",
+                                    ["— nije oznaceno (preskace se u analizi) —",
+                                     "Pamcenje", "Razumijevanje", "Primjena",
+                                     "Analiza", "Vrednovanje", "Sinteza"],
+                                    index=0, key=f"v2p_bloom_{_zid_d}")
+                                if _bloom.startswith("—"):
+                                    _zd.pop("bloom", None)
+                                else:
+                                    _zd["bloom"] = _bloom
+                                _prikazi = st.checkbox(
+                                    "Prikazi ponudene odgovore (A/B/C/D) za ovaj zadatak",
+                                    value=_zd.get("prikazi_opcije", True) is not False,
+                                    key=f"v2p_opc_{_zid_d}")
+                                _zd["prikazi_opcije"] = bool(_prikazi)
+                                _bod = st.text_input("Bodovi", value=str(model.broj(
+                                    _zd.get("bodovi"), 1)).replace(".", ","),
+                                    key=f"v2p_bod_{_zid_d}")
+                                try:
+                                    _zd["bodovi"] = max(1, int(float(_bod.replace(",", "."))))
+                                except ValueError:
+                                    st.caption("Bodovi moraju biti broj.")
+
+                _mamac_on = st.checkbox(
+                    "➕ Dodaj „nista od navedenog” svim zadacima visestrukog izbora",
+                    key="v2p_mamac",
+                    help="Dodaje se samo u PDF-u, ne mijenja bazu (kao u starom builderu).")
 
                 with st.expander("🩺 Zašto se slike ne vide"):
                     try:
@@ -570,7 +612,9 @@ with tab_pdf:
                             _slike_za_pdf = {}
                         _pdf = tex_test.generiraj(naziv=_naslov, zadaci=_lista, datum=_datum,
                                                   tip=_tipd, ukljuci_rjesenja=_rjesenja,
-                                                  slike=_slike_za_pdf)
+                                                  slike=_slike_za_pdf,
+                                                  dodaj_mamac=bool(st.session_state.get('v2p_mamac')),
+                                                  mamac_tekst='Nista od navedenog')
                         st.success(f"PDF generiran ({len(_pdf) // 1024} KB).")
                         st.download_button("⬇️ Preuzmi PDF", data=_pdf,
                                            file_name=tex_test.ime_datoteke(_naslov),

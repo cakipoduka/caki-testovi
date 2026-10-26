@@ -118,12 +118,18 @@ def zadatak_iz_retka(retak: dict) -> dict | None:
         return None
     odgovor = model.tekst(prvo(r, "konacan_odgovor"))
     opcije = _opcije(r)
-    visestruki = (model.tekst(prvo(r, "tip_zadatka")) == "visestruki_izbor" and len(opcije) >= 2)
+    _tip_tekst = " ".join(model.tekst(prvo(r, "tip_zadatka")).lower().split())
+    _izgleda_kao_izbor = (not _tip_tekst
+                          or "izbor" in _tip_tekst
+                          or "vise" in _tip_tekst
+                          or "više" in _tip_tekst
+                          or "multiple" in _tip_tekst)
+    visestruki = (len(opcije) >= 2 and _izgleda_kao_izbor)
     return {
         "id": zid,
         "tekst": tekst,
         "tip": "visestruki_izbor" if visestruki else "kratki_odgovor",
-        "opcije": opcije if visestruki else [],
+        "opcije": opcije,
         "odgovor": odgovor,
         "bodovi": model.broj(prvo(r, "bodovi", 1), 1) or 1,
         "slika": model.tekst(prvo(r, "slika_putanja")),
@@ -325,6 +331,9 @@ def _izgleda_kao_recenica(raw):
     ostalo = len(raw) - slova
     return slova > ostalo
 
+SLOVA_PONUDJENIH_ODGOVORA = ["A", "B", "C", "D", "E", "F", "G", "H"]
+
+
 def prikazi_opcije_markdown(ponudjeni_odgovori) -> str:
     """Vraća Markdown string za PREGLED ponuđenih odgovora (višestruki izbor) u Streamlit
     sučelju (ne za LaTeX!) - Streamlitov st.markdown zna renderirati $...$ preko KaTeX-a.
@@ -361,8 +370,12 @@ def prikazi_opcije_markdown(ponudjeni_odgovori) -> str:
 
 
 def opcije_markdown(zadatak: dict) -> str:
-    """Markdown s ponuđenim odgovorima A) … za prikaz u popisu (baza → UI)."""
-    opcije = _opcije(zadatak or {})
+    """Markdown s ponuđenim odgovorima A) … — radi i za **bazu** i za **zamrznuti** zadatak."""
+    z = zadatak or {}
+    opcije = z.get("opcije")
+    if not isinstance(opcije, (list, tuple)):
+        opcije = _opcije(z)
+    opcije = [model.tekst(o) for o in (opcije or []) if model.tekst(o)]
     if not opcije:
         return ""
     try:

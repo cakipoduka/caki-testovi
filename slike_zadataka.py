@@ -394,3 +394,16 @@ def prikazi_sliku_html(st, naziv: str, folder: str = "", sa_info_dict=None,
     except Exception:                                        # noqa: BLE001
         return False
     return False
+
+
+def preuzmi_url(url: str, timeout: int = 20):
+    """Preuzmi sliku s URL-a (Mathpix crop) — vraća bajtove ili None."""
+    try:
+        import requests
+
+        r = requests.get(str(url), timeout=timeout)
+        if getattr(r, "status_code", 0) == 200 and r.content and _valjana_slika(r.content):
+            return r.content
+    except Exception:                                  # noqa: BLE001
+        return None
+    return None

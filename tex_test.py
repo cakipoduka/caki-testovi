@@ -212,6 +212,31 @@ def spoji_slike(popis) -> str:
 
 # ------------------------------------------------------------------ tijelo zadataka (v2 oblik)
 
+def je_url_opcija(opcija) -> bool:
+    """Ponuđeni odgovor može biti URL slike (Mathpix crop) — tada se u PDF ubacuje slika."""
+    tekst = model.tekst(opcija).lower()
+    return (tekst.startswith("http://") or tekst.startswith("https://")) and any(
+        tekst.split("?")[0].endswith(x) for x in (".png", ".jpg", ".jpeg", ".gif", ".webp"))
+
+
+def izgradi_opcije_slike(opcije, slike: dict | None = None, visina: str = "1.6cm") -> str:
+    r"""Opcije u LaTeX-u; URL opcije idu kao includegraphics (ako su bajtovi dohvaćeni)."""
+    slike = slike or {}
+    dijelovi = []
+    for i, opcija in enumerate(opcije or []):
+        slovo = chr(65 + i)
+        if je_url_opcija(opcija):
+            ime = str(opcija).rstrip("/").split("/")[-1].split("?")[0] or f"opcija{i}.png"
+            if ime in slike:
+                dijelovi.append(r"\textbf{" + slovo + r")}~\includegraphics[height="
+                                + visina + "]{" + "images/" + ime + "}")
+            else:
+                dijelovi.append(r"\textbf{" + slovo + ")}~[slika]")
+        else:
+            dijelovi.append(r"\textbf{" + slovo + ")}~" + formatiraj_opciju(model.tekst(opcija)))
+    return "\n\\par\\vspace{3mm}\n\\noindent " + "\\quad ".join(dijelovi) + "\\par"
+
+
 def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = False,
                 mamac_tekst: str = "", slike: dict | None = None) -> tuple[str, str]:
     """Vrati (zadaci_body, rjesenja_body) — točno ono što `main.tex` uvozi."""
@@ -227,7 +252,10 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
         if opcije and z.get("prikazi_opcije", True) is not False:
             if dodaj_mamac and model.tekst(mamac_tekst):
                 opcije = opcije + [model.tekst(mamac_tekst)]
-            tekst += izgradi_opcije_blok(opcije)
+            if any(je_url_opcija(o) for o in opcije):
+                tekst += izgradi_opcije_slike(opcije, slike, visina="1.6cm")
+            else:
+                tekst += izgradi_opcije_blok(opcije)
 
         # slike: može ih biti VIŠE (zarezom) — u PDF ide samo ono što je stvarno dohvaćeno
         kandidati = razdvoji_slike(z.get("slika"))

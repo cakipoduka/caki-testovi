@@ -496,6 +496,19 @@ def dohvati_slike(zadaci, *, folder: str = "", sa_info_dict=None) -> dict:
 
     izlaz = {}
     for z in zadaci or []:
+        # opcije koje su URL slike (Mathpix crop) — preuzmi ih kao i sliku zadatka
+        for opcija in (z.get("opcije") or []):
+            if je_url_opcija(opcija):
+                ime_opt = str(opcija).rstrip("/").split("/")[-1].split("?")[0]
+                if ime_opt and ime_opt not in izlaz:
+                    try:
+                        import requests as _rq
+
+                        odgovor = _rq.get(str(opcija), timeout=20)
+                        if odgovor.status_code == 200 and _slika_valjana(odgovor.content):
+                            izlaz[ime_opt] = odgovor.content
+                    except Exception:                  # noqa: BLE001
+                        pass
         for ime in razdvoji_slike(z.get("slika")):
             if ime in izlaz:
                 continue

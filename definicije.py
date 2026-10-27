@@ -308,8 +308,12 @@ def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
     """
     d = definicija or {}
     did = model.tekst(d.get("definicija_id"))
-    if model.tekst(d.get("status")) in ("zatvoren", "arhiviran"):
-        return False, "Test je zatvoren/arhiviran — ne mijenja se."
+    _status = model.tekst(d.get("status"))
+    if _status == "arhiviran":
+        return False, "Test je arhiviran — ne mijenja se."
+    # `zatvoren` = nedostupan učenicima (Caki ga je namjerno pauzirao) → SMIJE se uređivati
+    if _status == "zatvoren":
+        return True, "Test je nedostupan učenicima — mijenja se slobodno."
     if did:
         try:
             if provedba.pokusaji_ucenika(sheet, did):
@@ -319,8 +323,8 @@ def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
             pass
     danas = model.datum(danas) or model.sada().date()
     od = model.datum(d.get("rok_od"))
-    if model.tekst(d.get("status")) == "nacrt":
-        return True, "Nacrt — mijenja se slobodno."
+    if _status in ("nacrt", "zatvoren"):
+        return True, "Nacrt/nedostupan — mijenja se slobodno."
     if od and danas < od:
         return True, f"Objavljen, ali rok počinje {model.datum_hr(od)} — još se smije mijenjati."
     if od:

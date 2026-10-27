@@ -503,6 +503,43 @@ with tab_pdf:
                                 except ValueError:
                                     st.caption("Bodovi moraju biti broj.")
 
+                                # KATEGORIJE VREDNOVANJA (UZV/RP/MK) — kao u Claudeovoj verziji
+                                st.caption("Kategorije vrednovanja (može više odjednom, bodovi po "
+                                           "kategoriji):")
+                                _kat = dict(_zd.get("kategorije") or {})
+                                _kk1, _kk2, _kk3 = st.columns(3)
+                                for _kol, (_kod, _naziv) in zip((_kk1, _kk2, _kk3),
+                                                                _KATEGORIJE_INFO):
+                                    with _kol:
+                                        _cekirano = st.checkbox(
+                                            _kod, value=_kod in _kat, key=f"v2p_kat_{_zid_d}_{_kod}",
+                                            help=_naziv)
+                                        _bod_k = st.text_input(
+                                            "bod.", value=str(_kat.get(_kod, "")),
+                                            key=f"v2p_katbod_{_zid_d}_{_kod}",
+                                            label_visibility="collapsed",
+                                            disabled=not _cekirano)
+                                        if _cekirano:
+                                            _kat[_kod] = model.tekst(_bod_k).replace(".", ",")
+                                        else:
+                                            _kat.pop(_kod, None)
+                                if _kat:
+                                    _zd["kategorije"] = _kat
+                                    _zbroj_k = tex_test.zbroj_kategorija(_zd)
+                                    if abs(_zbroj_k - model.broj(_zd.get("bodovi"), 1)) > 1e-9:
+                                        st.error(f"Zbroj po kategorijama: **{_zbroj_k:g} / "
+                                                 f"{model.broj(_zd.get('bodovi'), 1):g} bod.** — "
+                                                 "PDF se ne generira dok se ne uskladi.")
+                                    else:
+                                        st.success(f"Zbroj po kategorijama: {_zbroj_k:g} / "
+                                                   f"{model.broj(_zd.get('bodovi'), 1):g} bod.")
+                                else:
+                                    _zd.pop("kategorije", None)
+
+                                _opcije_panel = banka.opcije_markdown(_zd)
+                                if _opcije_panel:
+                                    st.markdown(_opcije_panel, unsafe_allow_html=True)
+
                 _mamac_on = st.checkbox(
                     "➕ Dodaj „nista od navedenog” svim zadacima visestrukog izbora",
                     key="v2p_mamac",

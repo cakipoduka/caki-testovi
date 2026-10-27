@@ -1,4 +1,6 @@
 """
+ZA SLJEDEĆEG AGENTA: TEX_TEST: PDF preko pdflatexa — preuzeti pipeline starog buildera (predložak, stilovi, 2 prolaza, kategorije, 2 stupca za rješenja).
+
 CAKI testovi v2 — `tex_test.py`
 📄 PDF TESTA preko **LaTeX-a (pdflatex)** — isti pipeline kao stari Test Builder.
 
@@ -344,8 +346,17 @@ def generiraj(*, naziv: str, zadaci: list, datum: str = "", tip: str = TIP_DOKUM
         ukupno_bodova=f"{ukupno:g}",
         kategorije_redovi=izgradi_kategorije_redovi(ukupno_po_kategoriji(zadaci)),
         predmet_zaglavlje=predmet_zaglavlje,
-        rjesenja_sekcija=(("\\newpage\n" + r"\input{generated/rjesenja_body}")
-                          if ukljuci_rjesenja else ""),
+        # PREUZETO iz starog buildera (komentar 8.10.2026.): rješenja u 2 stupca (multicols)
+        # da cijela sekcija stane na jednu stranicu; `\small` jer su retci kratki.
+        rjesenja_sekcija=((
+            "\\newpage\n"
+            "{\\color{MathSecondary}\\sffamily\\bfseries\\Large Rje\u0161enja}\\par\n"
+            "\\vspace{2mm}\\hrule height 1pt \\color{MathSecondary}\\vspace{4mm}\n"
+            "\\begin{multicols}{2}\n"
+            "\\small\n"
+            "\\input{generated/rjesenja_body}\n"
+            "\\end{multicols}"
+        ) if ukljuci_rjesenja else ""),
     )
 
     with tempfile.TemporaryDirectory() as tmp:

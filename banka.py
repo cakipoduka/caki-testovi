@@ -1,4 +1,6 @@
 """
+ZA SLJEDEĆEG AGENTA: BANKA: baza zadataka → zamrznuti zadatak. Aliasi (`max_bodovi`, `biblioteka_izvora`), opcije u 5 formata + LaTeX zaštita, prikaz opcija preuzet iz pipelinea.
+
 CAKI testovi v2 — `banka.py`
 ČITANJE POSTOJEĆE BAZE ZADATAKA (20.000+ zadataka) — **samo čitanje**, baza se ne dira.
 
@@ -381,6 +383,14 @@ def prikazi_opcije_markdown(ponudjeni_odgovori) -> str:
     return "  ".join(dijelovi)
 
 
+def je_url_slika(opcija) -> bool:
+    """Je li ponuđeni odgovor zapravo URL slike (Mathpix crop i sl.)?"""
+    t = model.tekst(opcija).lower()
+    return (t.startswith("http://") or t.startswith("https://")) and any(
+        t.split("?")[0].endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp")
+    )
+
+
 def opcije_markdown(zadatak: dict) -> str:
     """Markdown s ponuđenim odgovorima A) … — radi i za **bazu** i za **zamrznuti** zadatak."""
     z = zadatak or {}
@@ -390,6 +400,15 @@ def opcije_markdown(zadatak: dict) -> str:
     opcije = [model.tekst(o) for o in (opcije or []) if model.tekst(o)]
     if not opcije:
         return ""
+    if any(je_url_slika(o) for o in opcije):
+        dijelovi = []
+        for i, o in enumerate(opcije):
+            slovo = chr(65 + i)
+            if je_url_slika(o):
+                dijelovi.append(f"**{slovo})** <img src='{o}' style='max-height:70px'>")
+            else:
+                dijelovi.append(f"**{slovo})** {o}")
+        return " &nbsp; ".join(dijelovi)
     try:
         return prikazi_opcije_markdown(opcije)
     except Exception:                                  # noqa: BLE001

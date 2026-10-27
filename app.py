@@ -403,6 +403,16 @@ with tab_pdf:
             _lijevo, _desno = st.columns([3, 2])
 
             with _lijevo:
+                _p1, _p2 = st.columns(2)
+                if _p1.button("◀ Prethodna stranica", key="v2p_prev_gore",
+                              disabled=_info["stranica"] == 0):
+                    st.session_state["v2p_stranica"] = max(0, _info["stranica"] - 1)
+                    st.rerun()
+                if _p2.button("Sljedeća ▶", key="v2p_next_gore",
+                              disabled=_info["stranica"] + 1 >= _info["stranica_ukupno"]):
+                    st.session_state["v2p_stranica"] = _info["stranica"] + 1
+                    st.rerun()
+                st.caption(builder.tekst_stranice(_info))
                 _g1, _g2 = st.columns([1, 1])
                 if _g1.button(f"➕ Dodaj sve prikazane ({len(_info['zadaci'])})", key="v2p_dodaj_sve"):
                     for _zz in _info["zadaci"]:
@@ -429,7 +439,7 @@ with tab_pdf:
                         st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:900])
                         _opcije_md = banka.opcije_markdown(_z)
                         if _opcije_md:
-                            st.markdown(_opcije_md)
+                            st.markdown(_opcije_md, unsafe_allow_html=True)
                         st.caption(" · ".join(builder.oznake(_z)))
                         if _prikazi_slike and model.tekst(_z.get("slika")):
                             try:

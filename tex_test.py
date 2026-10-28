@@ -245,6 +245,14 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
     zad_lines, rjes_lines = [], []
     for i, z in enumerate(zadaci or [], start=1):
         tekst = escape_outside_math(model.tekst(z.get("tekst")).strip())
+        # SKUPINA: uvod + stavke a), b), c) — preuzeti `skupine.izgradi_stavke_blok`
+        if z.get("stavke"):
+            try:
+                import skupine as _sk
+
+                tekst += _sk.izgradi_stavke_blok(z.get("stavke"), escape=escape_outside_math)
+            except Exception:                          # noqa: BLE001 — skupina ne ruši PDF
+                pass
         video = model.tekst(z.get("video_url")).strip()
         bodovi = f"{model.broj(z.get('bodovi'), 1):g}"
         tip_z = model.tekst(z.get("tip"))

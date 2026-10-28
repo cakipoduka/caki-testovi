@@ -237,6 +237,55 @@ STUPCI_S_ALIASIMA = {
 STUPCI_NEOBAVEZNI = ["uloga", "izvor_naziv", "razred", "max_bodovi", "rjesenje"]
 
 
+# ------------------------------------------------------------------ skupine (a), b), c) — v1
+
+def _zamrzni_skupinu(jed: dict) -> dict | None:
+    """Skupina (uvod + stavke) → zamrznuti zadatak s `stavke` za PDF."""
+    import skupine as _sk
+
+    glavni = jed.get("glavni") or {}
+    z = zadatak_iz_retka(glavni)
+    if not z:
+        return None
+    stavke = []
+    for st in jed.get("stavke") or []:
+        s = zadatak_iz_retka(st)
+        if not s:
+            continue
+        s["oznaka_stavke"] = model.tekst(st.get("oznaka_stavke"))
+        # `izgradi_stavke_blok` traži ovo polje
+        s["tekst_zadatka_latex"] = model.tekst(st.get("tekst_zadatka_latex")) \
+            or model.tekst(st.get("tekst"))
+        stavke.append(s)
+    if not stavke:
+        return z                                        # nema stavki → običan zadatak
+    z["stavke"] = stavke
+    z["bodovi"] = model.broj(_sk.zbroji_bodove(jed.get("stavke") or []), z.get("bodovi") or 1) or 1
+    return z
+
+
+def svi_zadaci_grupirani(sheet) -> list[dict]:
+    """Zadaci kao JEDINICE: samostalni zadatak ili skupina sa stavkama (a, b, c…).
+
+    Koristi preuzeti `skupine.grupiraj` (isto kao v1) — jedinica je ono što profesor dodaje u test.
+    """
+    import skupine as _sk
+
+    redci = ucitaj(sheet)
+    jedinice, _upozorenja = _sk.grupiraj(redci)
+    izlaz = []
+    for jed in jedinice:
+        if (jed or {}).get("tip") == _sk.ULOGA_SKUPINA:
+            z = _zamrzni_skupinu(jed)
+            if z:
+                izlaz.append(z)
+        else:
+            z = zadatak_iz_retka(jed.get("glavni") or {})
+            if z:
+                izlaz.append(z)
+    return izlaz
+
+
 def provjeri_shemu(sheet) -> dict:
     """Koje od očekivanih stupaca baza ima, a koji nedostaju. Ne mijenja ništa.
 

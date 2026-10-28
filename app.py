@@ -15,6 +15,9 @@ SECRETS: GOOGLE_SERVICE_ACCOUNT_JSON, SHEET_ID (baza zadataka), CRM_SHEET_ID, AP
 import streamlit as st
 
 import analitika
+import provedba
+import posjete
+import podsjetnik
 import banka
 import builder
 import definicije
@@ -30,6 +33,9 @@ import tex_test
 import upute
 import zakljucna
 from veza import sheet_baze, sheet_crm
+import predlosci
+import pdf_izvjestaj
+import radovi
 
 st.set_page_config(page_title="CAKI — Testovi v2", page_icon="🧪", layout="wide")
 
@@ -577,6 +583,69 @@ with tab_pdf:
             if _lista and st.button("🧹 Očisti odabir", key="v2p_ocisti"):
                 st.session_state["v2p_odabrani"] = {}
                 st.rerun()
+
+            # --- 📁 PREDLOŠCI i 💾 NACRT (preuzeto iz v1: `TestBuilder_predlosci` / `_draft`)
+            with st.expander("📁 Predlošci i nacrt (nastavi gdje si stao)"):
+                try:
+                    _pl = predlosci.predlosci(_sheet())
+                    _nac = predlosci.nacrt(_sheet())
+
+                    if _nac and _nac.get("zadaci"):
+                        st.caption(f"💾 Nacrt od **{model.tekst(_nac.get('draft_id'))}** — "
+                                   f"{len(_nac.get('zadaci') or [])} zadataka"
+                                   + (f", naslov: {model.tekst(_nac.get('naslov_dokumenta'))}"
+                                      if model.tekst(_nac.get("naslov_dokumenta")) else ""))
+                        if st.button("▶ Nastavi iz nacrta", key="v2p_nacrt_ucitaj"):
+                            st.session_state["v2p_odabrani"] = {
+                                model.tekst(z.get("id")): z for z in _nac["zadaci"]
+                                if model.tekst(z.get("id"))}
+                            st.rerun()
+
+                    if _pl:
+                        _opcije_pl = {model.tekst(r.get("predlozak_id")): r for r in _pl}
+                        _odabir_pl = st.selectbox(
+                            "Spremljeni predlošci", list(_opcije_pl),
+                            format_func=lambda k: f"{model.tekst(_opcije_pl[k].get('naziv'))} · "
+                                                  f"{model.broj(_opcije_pl[k].get('broj_zadataka'))} zad.",
+                            key="v2p_pl_odabir")
+                        c_a, c_b = st.columns(2)
+                        if c_a.button("⬇ Učitaj predložak", key="v2p_pl_ucitaj"):
+                            _u = predlosci.ucitaj_predlozak(_sheet(), _odabir_pl)
+                            if _u.get("zadaci"):
+                                st.session_state["v2p_odabrani"] = {
+                                    model.tekst(z.get("id")): z for z in _u["zadaci"]
+                                    if model.tekst(z.get("id"))}
+                                st.rerun()
+                        if c_b.button("🗑 Obriši predložak", key="v2p_pl_obrisi"):
+                            predlosci.obrisi_predlozak(_sheet(), _odabir_pl)
+                            st.rerun()
+                    else:
+                        st.caption("Još nema spremljenih predložaka.")
+
+                    with st.form("v2p_pl_spremi"):
+                        _naziv_pl = st.text_input("Naziv predloška",
+                                                  placeholder="npr. Matura — linearna funkcija")
+                        if st.form_submit_button("💾 Spremi odabir kao predložak",
+                                                 disabled=not _lista):
+                            try:
+                                _red = predlosci.spremi_predlozak(
+                                    _sheet(), naziv=_naziv_pl, zadaci=_lista,
+                                    naslov_dokumenta=model.tekst(st.session_state.get("v2p_naslov")),
+                                    tip_dokumenta=model.tekst(st.session_state.get("v2p_tipd")))
+                                st.success(f"Predložak spremljen: **{_red['naziv']}**")
+                            except Exception as _e_pl:      # noqa: BLE001
+                                st.error(f"Predložak nije spremljen: {_e_pl}")
+
+                    if _lista:
+                        if st.button("💾 Spremi nacrt (nastavak rada)", key="v2p_nacrt_spremi"):
+                            _ok = predlosci.spremi_nacrt(
+                                _sheet(), zadaci=_lista,
+                                naslov_dokumenta=model.tekst(st.session_state.get("v2p_naslov")),
+                                tip_dokumenta=model.tekst(st.session_state.get("v2p_tipd")))
+                            st.success("Nacrt spremljen." if _ok else
+                                       "Nacrt nije spremljen (upis u bazu isključen?).")
+                except Exception as _e_pl2:                 # noqa: BLE001
+                    st.caption(f"Predlošci trenutno nisu dostupni: {_e_pl2}")
 
             # --- metapodaci i PDF
             m1, m2, m3 = st.columns(3)

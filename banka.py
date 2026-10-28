@@ -12,6 +12,8 @@ se učeniku **nakon testa**, nikad tijekom rješavanja.
 """
 from __future__ import annotations
 
+import re as _re
+
 import model
 import tablice
 
@@ -57,6 +59,19 @@ def _zakrpi_latex(tekst: str) -> str:
 
 def _ima_kontrolne(tekst: str) -> bool:
     return any(ord(z) < 32 and z not in "\n\r\t" for z in str(tekst or ""))
+
+
+def _opcije_za_zadatak(opcije, visestruki: bool, redak: dict) -> list:
+    """Ako su opcije placeholder „slika A"… → vrati **imena slika** redom (A, B, C, D).
+
+    Preuzeto pravilo iz v1 (`_opcije_su_slike_info`, 28.10.2026.): samo kad SVE opcije odgovaraju
+    obrascu; inače opcije ostaju kakve jesu (tekst).
+    """
+    if not visestruki:
+        return opcije
+    je_slike, _slika_pitanja, nazivi = opcije_su_slike_info(
+        opcije, "visestruki_izbor", redak.get("slika_putanja") or redak.get("slika"))
+    return nazivi if je_slike else opcije
 
 
 def _opcije(retak: dict) -> list[str]:
@@ -143,7 +158,7 @@ def zadatak_iz_retka(retak: dict) -> dict | None:
         "id": zid,
         "tekst": tekst,
         "tip": "visestruki_izbor" if visestruki else "kratki_odgovor",
-        "opcije": opcije,
+        "opcije": _opcije_za_zadatak(opcije, visestruki, r),
         "odgovor": odgovor,
         "bodovi": model.broj(prvo(r, "bodovi", 1), 1) or 1,
         "slika": model.tekst(prvo(r, "slika_putanja")),
@@ -381,6 +396,33 @@ def prikazi_opcije_markdown(ponudjeni_odgovori) -> str:
         slovo = SLOVA_PONUDJENIH_ODGOVORA[i] if i < len(SLOVA_PONUDJENIH_ODGOVORA) else str(i + 1)
         dijelovi.append(f"**{slovo})** {prikaz}")
     return "  ".join(dijelovi)
+
+
+# ------------------------------------------------------------------ opcije koje su SLIKE
+
+# Obrazac iz v1 (`_SLIKA_OPCIJA_RE`): placeholder koji AI upisuje pri uvozu — „slika A", „Slika B"…
+_SLIKA_OPCIJA_RE = _re.compile(r"^slika\s*[A-Ha-h]$", _re.IGNORECASE)
+
+
+def opcije_su_slike_info(opcije, tip_zadatka: str, slika_putanja) -> tuple:
+    """Preuzeto iz v1 (`_opcije_su_slike_info`, 28.10.2026.).
+
+    Vraća `(jesu_li_slike, slika_pitanja_ili_None, [nazivi_slika_opcija])`.
+    Prepoznaje se **samo** kad SVE opcije odgovaraju obrascu „slika X" — običan tekst i brojevi
+    ovo nikad ne pogode. Ako se broj slika ne poklapa s brojem opcija → siguran fallback (False).
+    """
+    if tip_zadatka != "visestruki_izbor" or len(opcije or []) < 2:
+        return False, None, []
+    if not all(_SLIKA_OPCIJA_RE.match(model.tekst(o).strip()) for o in opcije):
+        return False, None, []
+    import re as _re2
+
+    nazivi = [x.strip() for x in _re2.split(r"[|,]", model.tekst(slika_putanja)) if x.strip()]
+    if len(nazivi) == len(opcije):
+        return True, None, nazivi
+    if len(nazivi) == len(opcije) + 1:
+        return True, nazivi[0], nazivi[1:]
+    return False, None, []
 
 
 def je_url_slika(opcija) -> bool:

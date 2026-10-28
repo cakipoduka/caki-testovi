@@ -215,6 +215,8 @@ def spoji_slike(popis) -> str:
 def je_url_opcija(opcija) -> bool:
     """Ponuđeni odgovor može biti URL slike (Mathpix crop) — tada se u PDF ubacuje slika."""
     tekst = model.tekst(opcija).lower()
+    if tekst.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+        return True                                    # ime slike iz baze (oblik B)
     return (tekst.startswith("http://") or tekst.startswith("https://")) and any(
         tekst.split("?")[0].endswith(x) for x in (".png", ".jpg", ".jpeg", ".gif", ".webp"))
 

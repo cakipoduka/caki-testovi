@@ -105,7 +105,8 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
                 "Odgovor", slova, index=slova.index(trenutni) if trenutni in slova else 0,
                 key=_k("radio", pokusaj["pokusaj_id"], index),
                 format_func=lambda s: ("— odaberi —" if not s
-                                       else f"{s}) {rjesavanje.pripremi_latex(opcije[ord(s) - 65])}"),
+                                       else f"{s}) "
+                                            f"{rjesavanje.pripremi_latex(opcije[ord(s) - 65], zamotaj=True)}"),
             )
             novi = odabrano
         else:

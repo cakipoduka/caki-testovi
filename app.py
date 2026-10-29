@@ -872,8 +872,14 @@ with tab_rezultati:
             m1.metric("Predalo", f"{len(predali)} / {len(redci)}")
             m2.metric("Prosjek", f"{int(round(sum(predali) / len(predali)))} %" if predali else "—")
             m3.metric("Raspon", f"{min(predali)}–{max(predali)} %" if predali else "—")
-            st.dataframe([{k: r[k] for k in ("Mj.", "Učenik", "Grupa", "Predao", "Bodovi", "%")}
-                          for r in redci], hide_index=True, width="stretch")
+            st.dataframe(
+                [{k: r[k] for k in ("Mj.", "Učenik", "Grupa", "Predao", "Bodovi", "%")}
+                 for r in redci], hide_index=True, width="stretch",
+                column_config={
+                    # preuzeto iz portala: postotak kao trakica (lakše se vidi tko je gdje)
+                    "%": st.column_config.ProgressColumn(
+                        "Postotak", min_value=0, max_value=100, format="%d %%"),
+                })
             nisu = [r["Učenik"] for r in redci if r["Predao"] != "✅"]
             if nisu:
                 st.warning("**Nije predalo:** " + ", ".join(nisu[:20])
@@ -1067,7 +1073,11 @@ with tab_kvaliteta:
                 "r (diskriminacija)": z["r"],
                 "Razlikuje?": z["diskriminacija"],
                 "Preporuka": z["preporuka"],
-            } for z in izv["po_zadatku"]], hide_index=True, width="stretch")
+            } for z in izv["po_zadatku"]], hide_index=True, width="stretch",
+                column_config={
+                    "p (težina)": st.column_config.ProgressColumn(
+                        "p (težina)", min_value=0.0, max_value=1.0, format="%.2f"),
+                })
 
             st.markdown("**Po cjelinama (što najviše pada)**")
             st.dataframe([{
@@ -1111,7 +1121,12 @@ with tab_ocjene:
             for u in zakljucna.upozorenja(redci):
                 st.warning(u)
 
-            st.dataframe(zakljucna.tablica(redci), hide_index=True, width="stretch")
+            st.dataframe(
+                zakljucna.tablica(redci), hide_index=True, width="stretch",
+                column_config={
+                    "Prosjek %": st.column_config.ProgressColumn(
+                        "Prosjek", min_value=0, max_value=100, format="%d %%"),
+                })
 
             st.caption("Predlog ocjene je **izračun**, ne odluka. Profesor ga mijenja po svom "
                        "nahođenju — pragovi su 50/65/80/90 %.")

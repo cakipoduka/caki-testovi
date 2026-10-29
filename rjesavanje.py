@@ -133,14 +133,22 @@ def poruka_o_cekanju(broj: int) -> str:
 
 # ------------------------------------------------------------------ prikaz teksta
 
-def pripremi_latex(tekst) -> str:
-    r"""LaTeX iz baze pretvori u oblik koji Streamlit prikazuje.
+def pripremi_latex(tekst, zamotaj: bool = False) -> str:
+    r"""LaTeX iz baze → oblik koji Streamlit prikazuje.
 
-    Baza (i portal) koriste `\( … \)` i `\[ … \]`; Streamlit markdown prikazuje `$ … $` i `$$ … $$`.
+    `\(…\)` i `\[…\]` pretvaraju se u `$…$` / `$$…$$` (tako je zapisano u bazi).
+
+    `zamotaj=True` (preuzeto iz portala, `testovi_online.pripremi_latex`): ako tekst **nema**
+    `$`, a očito je matematika (`\frac`, `^`, `_`, `\sqrt`…), umotaj ga u `$…$` — inače učenik
+    vidi sirovi `\frac{1}{a^{3}+b^{3}}` umjesto razlomka.
     """
     s = model.tekst(tekst)
     if not s:
         return ""
     s = s.replace("\\(", "$").replace("\\)", "$")
     s = s.replace("\\[", "$$").replace("\\]", "$$")
+    if zamotaj and "$" not in s:
+        if any(znak in s for znak in ("\\", "^", "_")) or any(
+                naredba in s for naredba in ("frac", "sqrt", "cdot", "alpha", "beta", "pi")):
+            s = f"${s}$"
     return s

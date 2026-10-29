@@ -35,6 +35,7 @@ import izvjestaj
 import model
 import slike_zadataka
 import tablice
+import ucenici
 import samoprovjera
 import tex_test
 import upute
@@ -810,6 +811,50 @@ with tab_objavi:
                 _osvjezi()
             except Exception as e:                      # noqa: BLE001
                 st.error(f"Objava nije uspjela — **{type(e).__name__}**: {e}")
+        st.divider()
+        with st.expander("🔎 Dodaj test po učeniku (pretraga CRM-a)", expanded=False):
+            try:
+                _crm = sheet_crm()
+                _svi = ucenici.ucitaj_ucenike(_crm)
+                if not _svi:
+                    st.info("U CRM-u nema taba s učenicima (Ucenici / Učenici / Studenti). "
+                            "Za sada dodaj test šifrom gore.")
+                else:
+                    st.caption(f"U CRM-u pronađeno **{len(_svi)}** učenika.")
+                    _q = st.text_input("Traži (ime, email ili grupa)", key="v2_obj_q",
+                                       placeholder="npr. Ivan, mat-1, @gmail")
+                    _nadeni = ucenici.pretrazi(_svi, _q)[:25]
+                    if not _q:
+                        st.caption("Upiši barem dio imena — prikazuje se do 25 rezultata.")
+                    elif not _nadeni:
+                        st.warning("Nema rezultata za taj upit.")
+                    else:
+                        _oznake = {}
+                        for _u in _nadeni:
+                            _k = _u["ucenik_id"] or _u["ime"]
+                            _oznake[_k] = (_u["ime"]
+                                           + (f" · {_u['grupa']}" if _u["grupa"] else "")
+                                           + (f" · {_u['email']}" if _u["email"] else ""))
+                        _odaberi = st.multiselect("Odaberi učenike", list(_oznake),
+                                                  format_func=lambda k: _oznake.get(k, k),
+                                                  key="v2_obj_uc")
+                        if st.button("📤 Dodijeli odabranima", type="primary",
+                                     disabled=not _odaberi, key="v2_obj_uc_gumb"):
+                            _za_dodjelu = [u for u in _nadeni
+                                           if (u["ucenik_id"] or u["ime"]) in _odaberi]
+                            _broj, _greske = ucenici.dodijeli_test(
+                                _crm, d, _za_dodjelu, korisnik="caki")
+                            if _greske:
+                                st.error("Dodjela nije uspjela: " + "; ".join(_greske))
+                            else:
+                                if model.tekst(d.get("status")) == "nacrt":
+                                    definicije.promijeni_status(_sheet(), odabir_t, "objavljen",
+                                                                korisnik="caki")
+                                st.success(f"Dodano **{_broj}** učenika po imenu.")
+                                _osvjezi()
+            except Exception as _e_uc:                  # noqa: BLE001
+                st.caption(f"Pretraga učenika trenutno nije dostupna: {_e_uc}")
+
                 with st.expander("Što provjeriti"):
                     st.caption("· je li upis uključen (bočna traka)")
                     st.caption("· postoji li tab `Dodjele` (⚙️ Postavke → Pripremi tabove)")

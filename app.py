@@ -141,6 +141,28 @@ def _baza():
     return sheet_baze()
 
 
+def _prikazi_tekst_s_tabelama(tekst, kljuc: str = "") -> None:
+    """Prikaži tekst zadatka; pipe tablice idu kao PRAVA tablica (Caki 29.10.2026.).
+
+    Ako tablice nema — prikaz je isti kao prije (`builder.pripremi_za_prikaz`).
+    """
+    import tabele
+
+    try:
+        if not tabele.ima_tabelu(tekst):
+            st.markdown(builder.pripremi_za_prikaz(tekst)[:900])
+            return
+        for dio in tabele.podijeli(tekst):
+            if dio["tip"] == "tabela":
+                st.markdown(tabele.html_tabela(dio["sadrzaj"]), unsafe_allow_html=True)
+            else:
+                _cisto = model.tekst(dio["sadrzaj"]).strip()
+                if _cisto:
+                    st.markdown(builder.pripremi_za_prikaz(_cisto)[:900])
+    except Exception:                                  # noqa: BLE001
+        st.markdown(builder.pripremi_za_prikaz(tekst)[:900])
+
+
 @st.cache_data(ttl=300, show_spinner="Čitam bazu zadataka…")
 def _zadaci():
     try:
@@ -439,7 +461,7 @@ with tab_pdf:
                             if c2.button("➕ Dodaj", key=f"v2p_add_{_zid}"):
                                 _odabrani[_zid] = _z
                                 st.rerun()
-                        st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:900])
+                        _prikazi_tekst_s_tabelama(_z.get("tekst"), kljuc="popis")
                         _opcije_md = banka.opcije_markdown(_z)
                         if _opcije_md:
                             st.markdown(_opcije_md, unsafe_allow_html=True)
@@ -481,7 +503,7 @@ with tab_pdf:
                             if d4.button("✕", key=f"v2p_del_{_zid_d}", help="ukloni"):
                                 _odabrani.pop(_zid_d, None)
                                 st.rerun()
-                            d1.markdown(builder.pripremi_za_prikaz(_zd.get("tekst"))[:220], unsafe_allow_html=True)
+                            d1.markdown(builder.pripremi_za_prikaz(_zd.get("tekst"))[:220].replace("|", "\u2502"), unsafe_allow_html=True)
                             with st.expander("⚙️ Detalji zadatka"):
                                 _bloom = st.selectbox(
                                     "🧠 Bloom razina (za analizu napretka)",
@@ -812,48 +834,119 @@ with tab_objavi:
             except Exception as e:                      # noqa: BLE001
                 st.error(f"Objava nije uspjela — **{type(e).__name__}**: {e}")
         st.divider()
-        with st.expander("🔎 Dodaj test po učeniku (pretraga CRM-a)", expanded=False):
+        # ================================================================ KOME OBJAVLJUJEM
+        # Obrazac preuzet iz `caki-baza-zadataka/testovi_online.py` (Caki 28.10.2026.: „sviđa mi se")
+        _PUBLIKE = {
+            "nacrt": "🔒 Nacrt — spremi, ne vidi ga nitko",
+            "grupa": "👥 Grupa / kanta (Matura ili Upisi)",
+            "ucenici": "🧑 Pojedini učenici",
+            "svi": "🌍 Svi učenici programa",
+        }
+        st.markdown("**Kome objavljujem**")
+        _publika = st.radio("Kome objavljujem", list(_PUBLIKE),
+                            format_func=lambda k: _PUBLIKE[k], index=0,
+                            key="v2_obj_publika", label_visibility="collapsed")
+
+        _cilj_ucenici: list[dict] = []
+        _program = ""
+
+        if _publika == "grupa":
+            _sve_grupe = []
             try:
-                _crm = sheet_crm()
-                _svi = ucenici.ucitaj_ucenike(_crm)
-                if not _svi:
-                    st.info("U CRM-u nema taba s učenicima (Ucenici / Učenici / Studenti). "
-                            "Za sada dodaj test šifrom gore.")
-                else:
-                    st.caption(f"U CRM-u pronađeno **{len(_svi)}** učenika.")
-                    _q = st.text_input("Traži (ime, email ili grupa)", key="v2_obj_q",
-                                       placeholder="npr. Ivan, mat-1, @gmail")
-                    _nadeni = ucenici.pretrazi(_svi, _q)[:25]
-                    if not _q:
-                        st.caption("Upiši barem dio imena — prikazuje se do 25 rezultata.")
-                    elif not _nadeni:
-                        st.warning("Nema rezultata za taj upit.")
-                    else:
-                        _oznake = {}
-                        for _u in _nadeni:
-                            _k = _u["ucenik_id"] or _u["ime"]
-                            _oznake[_k] = (_u["ime"]
-                                           + (f" · {_u['grupa']}" if _u["grupa"] else "")
-                                           + (f" · {_u['email']}" if _u["email"] else ""))
-                        _odaberi = st.multiselect("Odaberi učenike", list(_oznake),
-                                                  format_func=lambda k: _oznake.get(k, k),
-                                                  key="v2_obj_uc")
-                        if st.button("📤 Dodijeli odabranima", type="primary",
-                                     disabled=not _odaberi, key="v2_obj_uc_gumb"):
-                            _za_dodjelu = [u for u in _nadeni
-                                           if (u["ucenik_id"] or u["ime"]) in _odaberi]
-                            _broj, _greske = ucenici.dodijeli_test(
-                                _crm, d, _za_dodjelu, korisnik="caki")
-                            if _greske:
-                                st.error("Dodjela nije uspjela: " + "; ".join(_greske))
-                            else:
-                                if model.tekst(d.get("status")) == "nacrt":
-                                    definicije.promijeni_status(_sheet(), odabir_t, "objavljen",
-                                                                korisnik="caki")
-                                st.success(f"Dodano **{_broj}** učenika po imenu.")
-                                _osvjezi()
-            except Exception as _e_uc:                  # noqa: BLE001
-                st.caption(f"Pretraga učenika trenutno nije dostupna: {_e_uc}")
+                _sve_grupe = grupe.ucitaj_grupe(_sheet())
+            except Exception:                          # noqa: BLE001
+                _sve_grupe = []
+            _opcije_g = {model.tekst(g.get("kod") or g.get("grupa_id")): g
+                         for g in _sve_grupe if (g.get("ucenici"))}
+            if not _opcije_g:
+                st.warning("Nema grupa ni kanti s učenicima — provjeri raspored Mature ili grupe Upisa.")
+            else:
+                _odabrane = st.multiselect(
+                    "Grupa / kanta", list(_opcije_g),
+                    format_func=lambda k: f"{model.tekst(_opcije_g[k].get('naziv')) or k} "
+                                          f"({len(_opcije_g[k]['ucenici'])} uč.)",
+                    key="v2_obj_grupe")
+                for _k in _odabrane:
+                    _cilj_ucenici += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
+                                       "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
+                                      for u in (_opcije_g[_k].get("ucenici") or [])
+                                      if model.tekst(u.get("ucenik_id"))]
+                if _cilj_ucenici:
+                    st.caption(f"Test će dobiti **{len(_cilj_ucenici)}** učenika.")
+
+        elif _publika == "ucenici":
+            _svi_u = {}
+            # 1) iz CRM baze učenika (pretraga po imenu) — novo
+            try:
+                for _u in ucenici.ucitaj_ucenike(sheet_crm()):
+                    _uid = model.tekst(_u.get("ucenik_id") or _u.get("ime")).upper()
+                    if _uid:
+                        _svi_u[_uid] = model.tekst(_u.get("ime"))
+            except Exception:                          # noqa: BLE001
+                pass
+            # 2) iz grupa (ako CRM nema tab učenika)
+            if not _svi_u:
+                try:
+                    for _g in grupe.ucitaj_grupe(_sheet()):
+                        for _u in (_g.get("ucenici") or []):
+                            _uid = model.tekst(_u.get("ucenik_id")).upper()
+                            if _uid:
+                                _svi_u.setdefault(_uid, model.tekst(_u.get("ime_djeteta")))
+                except Exception:                      # noqa: BLE001
+                    pass
+
+            if _svi_u:
+                st.caption(f"Pretraga po **{len(_svi_u)}** učenika — piši dio imena ili šifru.")
+                _odabrani_u = st.multiselect(
+                    "Učenici", sorted(_svi_u),
+                    format_func=lambda k: f"{_svi_u.get(k) or '—'} ({k})",
+                    key="v2_obj_ucenici")
+                _cilj_ucenici += [{"ucenik_id": k, "ime_djeteta": _svi_u.get(k, "")}
+                                  for k in _odabrani_u]
+            else:
+                st.caption("Nema popisa učenika — upiši šifre ručno ispod.")
+
+            _rucno = st.text_input("Ili šifre ručno (odvoji zarezom)", key="v2_obj_sifre",
+                                   placeholder="AA1111, BB2222")
+            for _s in [x.strip().upper() for x in model.tekst(_rucno).split(",") if x.strip()]:
+                _cilj_ucenici.append({"ucenik_id": _s, "ime_djeteta": ""})
+            if _cilj_ucenici:
+                st.caption(f"Test će dobiti **{len(_cilj_ucenici)}** učenika.")
+
+        elif _publika == "svi":
+            _programi = ["matura", "instrukcije", "upisi"]
+            _program = st.selectbox("Program", _programi, key="v2_obj_program")
+            st.warning("Ovo objavljuje **svim učenicima odabranog programa** — koristi kad test "
+                       "stvarno ide svima.", icon="⚠️")
+
+        else:
+            st.caption("🔒 Nacrt se sprema u Sheet, ali ga **ne vidi nijedan učenik**. Poslije ga "
+                       "objavljuješ u 🧪 Testovi.")
+
+        # gumb za objavu po novom obrascu
+        _moze = bool(_cilj_ucenici) or _publika == "svi"
+        if st.button("📤 Objavi odabranoj publici", type="primary", key="v2_obj_gumb2",
+                     disabled=not _moze):
+            try:
+                if _publika == "svi":
+                    _svi_u2 = []
+                    for _g in grupe.ucitaj_grupe(_sheet()):
+                        if model.tekst(_g.get("program")).lower() != _program:
+                            continue
+                        _svi_u2 += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
+                                     "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
+                                    for u in (_g.get("ucenici") or [])
+                                    if model.tekst(u.get("ucenik_id"))]
+                    _cilj_ucenici = _svi_u2
+                _rez = dodjele.dodaj(_sheet(), d, _cilj_ucenici, dodijelio="caki")
+                if model.tekst(d.get("status")) == "nacrt":
+                    definicije.promijeni_status(_sheet(), odabir_t, "objavljen", korisnik="caki")
+                st.success(f"Dodano **{_rez.get('dodano', 0)}** učenika."
+                           + (f" Preskočeno (već imaju): {len(_rez.get('preskoceno') or [])}."
+                              if _rez.get("preskoceno") else ""))
+                _osvjezi()
+            except Exception as _e_obj:                 # noqa: BLE001
+                st.error(f"Objava nije uspjela — **{type(_e_obj).__name__}**: {_e_obj}")
 
                 with st.expander("Što provjeriti"):
                     st.caption("· je li upis uključen (bočna traka)")

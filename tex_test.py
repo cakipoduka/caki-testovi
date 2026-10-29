@@ -244,7 +244,17 @@ def izgradi_tex(zadaci, ukljuci_rjesenja: bool = False, dodaj_mamac: bool = Fals
     """Vrati (zadaci_body, rjesenja_body) — točno ono što `main.tex` uvozi."""
     zad_lines, rjes_lines = [], []
     for i, z in enumerate(zadaci or [], start=1):
-        tekst = escape_outside_math(model.tekst(z.get("tekst")).strip())
+        _sirovi = model.tekst(z.get("tekst")).strip()
+        # 📊 tablice: pipe tablica → pravi LaTeX tabular (inače bi se ispisale crte i stupci)
+        try:
+            import tabele as _tab
+
+            if _tab.ima_tabelu(_sirovi):
+                tekst = _tab.zamijeni_u_tekstu(_sirovi, escape=escape_outside_math)
+            else:
+                tekst = escape_outside_math(_sirovi)
+        except Exception:                              # noqa: BLE001
+            tekst = escape_outside_math(_sirovi)
         # SKUPINA: uvod + stavke a), b), c) — preuzeti `skupine.izgradi_stavke_blok`
         if z.get("stavke"):
             try:

@@ -14,6 +14,13 @@ SECRETS: GOOGLE_SERVICE_ACCOUNT_JSON, SHEET_ID (baza zadataka), CRM_SHEET_ID, AP
 """
 import streamlit as st
 
+# Kategorije vrednovanja (UZV/RP/MK) — iste kao u v1 (`KATEGORIJE_INFO` u Test Builderu)
+_KATEGORIJE_INFO = [
+    ("UZV", "Usvojenost znanja i vještina"),
+    ("RP", "Rješavanje problema"),
+    ("MK", "Matematička komunikacija"),
+]
+
 import analitika
 import provedba
 import posjete
@@ -73,10 +80,9 @@ if not prijava():
 
 # ------------------------------------------------------------------ sigurnosna kočnica
 # ŽIVA BAZA. Upis je zadano ISKLJUČEN — uključuje se u bočnoj traci (ili `V2_UPIS = "da"` u Secrets).
-_sto_secret = model.tekst(st.secrets.get("V2_UPIS")).lower() in ("da", "1", "true")
-if "v2_upis" not in st.session_state:
-    st.session_state["v2_upis"] = _sto_secret
-tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
+# 28.10.2026.: Caki radi na ŽIVOJ bazi — upis je uvijek uključen (prekidač uklonjen).
+# Sigurnosni sloj u `tablice` ostaje: ako se kodom postavi `postavi_pisanje(False)`, upis se blokira.
+tablice.postavi_pisanje(True)
 
 
 # ------------------------------------------------------------------ provjera tajni
@@ -255,16 +261,6 @@ with st.sidebar:
     st.caption("Faza A: testovi, objave, rezultati. Rješavanje dolazi sljedeće.")
 
     st.divider()
-    st.markdown("#### 🔐 Živa baza")
-    if st.session_state.get("v2_upis"):
-        st.success("Upis je UKLJUČEN — mijenja pravi CRM Sheet.")
-    else:
-        st.info("Upis je ISKLJUČEN — sve se samo čita. Ništa se ne može pokvariti.")
-    st.toggle("Uključi upis u živu bazu", key="v2_upis",
-              help="Kad je isključeno, nijedan podatak se ne upisuje (samo čitanje). "
-                   "Uključi tek kad želiš spremiti test ili objaviti učenicima.")
-    tablice.postavi_pisanje(bool(st.session_state.get("v2_upis")))
-    st.caption("Tabove pripremaš u ⚙️ Postavkama (jednom, prvi put).")
 
 tab_testovi, tab_pdf, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
     ["🧪 Testovi", "🧱 Složi test", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🎓 Ocjene",
@@ -873,12 +869,14 @@ with tab_rezultati:
             m2.metric("Prosjek", f"{int(round(sum(predali) / len(predali)))} %" if predali else "—")
             m3.metric("Raspon", f"{min(predali)}–{max(predali)} %" if predali else "—")
             st.dataframe(
-                [{k: r[k] for k in ("Mj.", "Učenik", "Grupa", "Predao", "Bodovi", "%")}
+                [{**{k: r[k] for k in ("Mj.", "Učenik", "Grupa", "Predao", "Bodovi")},
+                  "% (trakica)": r["%"], "% (broj)": r["%"]}
                  for r in redci], hide_index=True, width="stretch",
                 column_config={
-                    # preuzeto iz portala: postotak kao trakica (lakše se vidi tko je gdje)
-                    "%": st.column_config.ProgressColumn(
+                    # trakica + broj (Caki želi oboje)
+                    "% (trakica)": st.column_config.ProgressColumn(
                         "Postotak", min_value=0, max_value=100, format="%d %%"),
+                    "% (broj)": st.column_config.NumberColumn("%", format="%d %%"),
                 })
             nisu = [r["Učenik"] for r in redci if r["Predao"] != "✅"]
             if nisu:
@@ -1122,10 +1120,12 @@ with tab_ocjene:
                 st.warning(u)
 
             st.dataframe(
-                zakljucna.tablica(redci), hide_index=True, width="stretch",
+                [{**red, "Prosjek (trakica)": red["Prosjek %"]}
+                 for red in zakljucna.tablica(redci)], hide_index=True, width="stretch",
                 column_config={
-                    "Prosjek %": st.column_config.ProgressColumn(
+                    "Prosjek (trakica)": st.column_config.ProgressColumn(
                         "Prosjek", min_value=0, max_value=100, format="%d %%"),
+                    "Prosjek %": st.column_config.NumberColumn("Prosjek %", format="%d %%"),
                 })
 
             st.caption("Predlog ocjene je **izračun**, ne odluka. Profesor ga mijenja po svom "

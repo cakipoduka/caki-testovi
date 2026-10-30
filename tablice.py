@@ -103,14 +103,45 @@ def _normal_ime(tekst) -> str:
     return " ".join(s.split())
 
 
-def _postojeci_tab(sheet, tab: str):
-    """Nađi tab tolerantno (isti naziv, ali razmak/velika slova/dijakritika) — ili None."""
+def _naslovi_tabova(sheet) -> list[str]:
+    """Svi naslovi tabova — prvo `worksheets()`, pa metapodaci (ako prvo padne)."""
+    naslovi = []
     try:
         for ws in sheet.worksheets():
-            if _normal_ime(getattr(ws, "title", "")) == _normal_ime(tab):
-                return ws
+            naslov = getattr(ws, "title", None) or getattr(ws, "_properties", {}).get("title", "")
+            if naslov:
+                naslovi.append(_kao_tekst(naslov))
     except Exception:                                   # noqa: BLE001
-        return None
+        pass
+    if not naslovi:
+        try:
+            meta = sheet.fetch_sheet_metadata()
+            for list_ in (meta or {}).get("sheets", []):
+                naslov = (list_.get("properties") or {}).get("title")
+                if naslov:
+                    naslovi.append(_kao_tekst(naslov))
+        except Exception:                               # noqa: BLE001
+            pass
+    return naslovi
+
+
+def _postojeci_tab(sheet, tab: str):
+    """Nađi tab tolerantno: worksheets() → metapodaci → izravne varijante zapisa."""
+    cilj = _normal_ime(tab)
+    for naslov in _naslovi_tabova(sheet):
+        if _normal_ime(naslov) == cilj:
+            try:
+                return sheet.worksheet(naslov)
+            except Exception:                           # noqa: BLE001
+                break
+    # izravne varijante (Google je osjetljiv na točan zapis)
+    for varijanta in (tab, tab.strip(), tab.lower(), tab.upper(), tab.capitalize()):
+        try:
+            ws = sheet.worksheet(varijanta)
+            if ws is not None:
+                return ws
+        except Exception:                               # noqa: BLE001
+            continue
     return None
 
 
@@ -140,7 +171,12 @@ def osiguraj(sheet, tab: str):
         postoji = _postojeci_tab(sheet, tab)
         if postoji is not None:
             return postoji
-        raise RuntimeError(f"Tab `{tab}` nije moguće naći ni napraviti: {e}") from e
+        vidljivi = ", ".join(_naslovi_tabova(sheet)[:25]) or "(nijedan tab nije vidljiv)"
+        raise RuntimeError(
+            f"Tab `{tab}` nije moguće naći ni napraviti ({e}). "
+            f"Tabovi koje aplikacija vidi u ovom Sheetu: {vidljivi}. "
+            "Ako `Dodjele` postoji, provjeri da je isti Spreadsheet ID u Secrets."
+        ) from e
 
 
 def osiguraj_sve(sheet) -> list[str]:

@@ -766,76 +766,28 @@ with tab_pdf:
 
 with tab_objavi:
     upute.prikazi(st, "objavi")
-    testovi = _testovi()
-    if not testovi:
+    _testovi_obj = _testovi()
+    if not _testovi_obj:
         st.info("Ova kartica se puni kad postoji barem jedan test. Napravi ga u 🧪 Testovi.")
     else:
-        opcije_t = {model.tekst(x.get("definicija_id")): x for x in testovi}
-        odabir_t = st.selectbox("Test", list(opcije_t),
-                                format_func=lambda i: f"{opcije_t[i].get('naziv')} · "
-                                                      f"{model.tekst(opcije_t[i].get('status'))}",
-                                key="v2_obj_test")
-        d = opcije_t[odabir_t]
+        _opcije_t = {model.tekst(x.get("definicija_id")): x for x in _testovi_obj}
+        _odabir_t = st.selectbox("Test", list(_opcije_t),
+                                 format_func=lambda i: f"{_opcije_t[i].get('naziv')} · "
+                                                       f"{model.tekst(_opcije_t[i].get('status'))}",
+                                 key="v2_obj_test")
+        _d = _opcije_t[_odabir_t]
 
-        u_roku = dodjele.rok_dodjele({}, d)
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Zadataka", d.get("broj_zadataka"))
-        k2.metric("Bodova", d.get("bodovi_ukupno"))
-        k3.metric("Rok", f"{model.datum_hr(u_roku['od'])} – {model.datum_hr(u_roku['do'])}")
-        k4.metric("Dodijeljeno", len([x for x in _dodjele()
-                                      if model.tekst(x.get("definicija_id")) == odabir_t]))
+        _u_roku = dodjele.rok_dodjele({}, _d)
+        _k1, _k2, _k3, _k4 = st.columns(4)
+        _k1.metric("Zadataka", _d.get("broj_zadataka"))
+        _k2.metric("Bodova", _d.get("bodovi_ukupno"))
+        _k3.metric("Rok", f"{model.datum_hr(_u_roku['od'])} – {model.datum_hr(_u_roku['do'])}")
+        _k4.metric("Dodijeljeno", len([x for x in _dodjele()
+                                       if model.tekst(x.get("definicija_id")) == _odabir_t]))
 
-        st.markdown("**Kome ide**")
-        nacin = st.radio("Način", ["grupa", "rucno"], horizontal=True,
-                         format_func=lambda k: "👥 Grupa / kanta" if k == "grupa" else "🧑 Šifre učenika",
-                         key="v2_obj_nacin")
-
-        ucenici, grupa_naziv = [], ""
-        if nacin == "grupa":
-            grupe = _grupe()
-            if not grupe:
-                st.caption("Nema grupa ni kanti (Upisi / Raspored Mature) — upiši šifre ručno.")
-            else:
-                opcije_g = {g["kod"]: g for g in grupe}
-                odabrane = st.multiselect(
-                    "Grupa / kanta", list(opcije_g),
-                    format_func=lambda k: f"{opcije_g[k]['naziv']} ({len(opcije_g[k]['ucenici'])} uč.)",
-                    key="v2_obj_grupe")
-                for k in odabrane:
-                    ucenici += list(opcije_g[k]["ucenici"])
-                grupa_naziv = ", ".join(opcije_g[k]["naziv"] for k in odabrane)
-        else:
-            sifre = st.text_input("Šifre učenika (zarez)", key="v2_obj_sifre",
-                                  placeholder="AA1111, BB2222")
-            ucenici = [{"ucenik_id": s.strip().upper()} for s in model.tekst(sifre).split(",") if s.strip()]
-
-        _upis_ok = bool(tablice.PISANJE)
-        if not _upis_ok:
-            st.warning("Upis u bazu je ISKLJUČEN — uključi ga u bočnoj traci. "
-                       "Bez toga se test ne može objaviti.")
-        if ucenici:
-            _prvih = ", ".join(model.tekst(u.get("ucenik_id")) for u in ucenici[:5])
-            st.caption(f"Učenika prepoznato: {len(ucenici)} ({_prvih}"
-                       + (" …)" if len(ucenici) > 5 else ")"))
-        else:
-            st.caption("Učenika prepoznato: 0 — upiši šifru (npr. TEST01).")
-        st.caption(f"Upis u bazu: {'uključen' if _upis_ok else 'isključen'}")
-
-
-        if st.button("📤 Objavi", type="primary", disabled=not ucenici, key="v2_obj_gumb"):
-            try:
-                rez = dodjele.dodaj(_sheet(), d, ucenici, grupa=grupa_naziv, dodijelio="caki")
-                if model.tekst(d.get("status")) == "nacrt":
-                    definicije.promijeni_status(_sheet(), odabir_t, "objavljen", korisnik="caki")
-                st.success(f"Dodano **{rez['dodano']}** učenika."
-                           + (f" Preskočeno (već imaju): {len(rez['preskoceno'])}."
-                              if rez["preskoceno"] else ""))
-                _osvjezi()
-            except Exception as e:                      # noqa: BLE001
-                st.error(f"Objava nije uspjela — **{type(e).__name__}**: {e}")
         st.divider()
-        # ================================================================ KOME OBJAVLJUJEM
-        # Obrazac preuzet iz `caki-baza-zadataka/testovi_online.py` (Caki 28.10.2026.: „sviđa mi se")
+        # ============================================================ KOME OBJAVLJUJEM (jedini blok)
+        # Obrazac preuzet iz `caki-baza-zadataka/testovi_online.py` (Caki 28.10.2026.)
         _PUBLIKE = {
             "nacrt": "🔒 Nacrt — spremi, ne vidi ga nitko",
             "grupa": "👥 Grupa / kanta (Matura ili Upisi)",
@@ -847,36 +799,34 @@ with tab_objavi:
                             format_func=lambda k: _PUBLIKE[k], index=0,
                             key="v2_obj_publika", label_visibility="collapsed")
 
-        _cilj_ucenici: list[dict] = []
+        _cilj: list[dict] = []
         _program = ""
 
         if _publika == "grupa":
-            _sve_grupe = []
+            _sve_g = []
             try:
-                _sve_grupe = grupe.ucitaj_grupe(_sheet())
+                _sve_g = _grupe()
             except Exception:                          # noqa: BLE001
-                _sve_grupe = []
+                _sve_g = []
             _opcije_g = {model.tekst(g.get("kod") or g.get("grupa_id")): g
-                         for g in _sve_grupe if (g.get("ucenici"))}
+                         for g in _sve_g if g.get("ucenici")}
             if not _opcije_g:
                 st.warning("Nema grupa ni kanti s učenicima — provjeri raspored Mature ili grupe Upisa.")
             else:
-                _odabrane = st.multiselect(
+                _odabrane_g = st.multiselect(
                     "Grupa / kanta", list(_opcije_g),
                     format_func=lambda k: f"{model.tekst(_opcije_g[k].get('naziv')) or k} "
                                           f"({len(_opcije_g[k]['ucenici'])} uč.)",
                     key="v2_obj_grupe")
-                for _k in _odabrane:
-                    _cilj_ucenici += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
-                                       "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
-                                      for u in (_opcije_g[_k].get("ucenici") or [])
-                                      if model.tekst(u.get("ucenik_id"))]
-                if _cilj_ucenici:
-                    st.caption(f"Test će dobiti **{len(_cilj_ucenici)}** učenika.")
+                for _k in _odabrane_g:
+                    _cilj += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
+                               "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
+                              for u in (_opcije_g[_k].get("ucenici") or [])
+                              if model.tekst(u.get("ucenik_id"))]
 
         elif _publika == "ucenici":
-            _svi_u = {}
-            # 1) iz CRM baze učenika (pretraga po imenu) — novo
+            _svi_u: dict[str, str] = {}
+            # 1) CRM baza učenika (pretraga po imenu)
             try:
                 for _u in ucenici.ucitaj_ucenike(sheet_crm()):
                     _uid = model.tekst(_u.get("ucenik_id") or _u.get("ime")).upper()
@@ -884,10 +834,10 @@ with tab_objavi:
                         _svi_u[_uid] = model.tekst(_u.get("ime"))
             except Exception:                          # noqa: BLE001
                 pass
-            # 2) iz grupa (ako CRM nema tab učenika)
+            # 2) ako CRM nema tab učenika — grupe
             if not _svi_u:
                 try:
-                    for _g in grupe.ucitaj_grupe(_sheet()):
+                    for _g in _grupe():
                         for _u in (_g.get("ucenici") or []):
                             _uid = model.tekst(_u.get("ucenik_id")).upper()
                             if _uid:
@@ -901,21 +851,18 @@ with tab_objavi:
                     "Učenici", sorted(_svi_u),
                     format_func=lambda k: f"{_svi_u.get(k) or '—'} ({k})",
                     key="v2_obj_ucenici")
-                _cilj_ucenici += [{"ucenik_id": k, "ime_djeteta": _svi_u.get(k, "")}
-                                  for k in _odabrani_u]
+                _cilj += [{"ucenik_id": k, "ime_djeteta": _svi_u.get(k, "")} for k in _odabrani_u]
             else:
-                st.caption("Nema popisa učenika — upiši šifre ručno ispod.")
+                st.caption("Nema popisa učenika u CRM-u — upiši šifre ručno ispod.")
 
             _rucno = st.text_input("Ili šifre ručno (odvoji zarezom)", key="v2_obj_sifre",
                                    placeholder="AA1111, BB2222")
             for _s in [x.strip().upper() for x in model.tekst(_rucno).split(",") if x.strip()]:
-                _cilj_ucenici.append({"ucenik_id": _s, "ime_djeteta": ""})
-            if _cilj_ucenici:
-                st.caption(f"Test će dobiti **{len(_cilj_ucenici)}** učenika.")
+                _cilj.append({"ucenik_id": _s, "ime_djeteta": ""})
 
         elif _publika == "svi":
-            _programi = ["matura", "instrukcije", "upisi"]
-            _program = st.selectbox("Program", _programi, key="v2_obj_program")
+            _program = st.selectbox("Program", ["matura", "instrukcije", "upisi"],
+                                    key="v2_obj_program")
             st.warning("Ovo objavljuje **svim učenicima odabranog programa** — koristi kad test "
                        "stvarno ide svima.", icon="⚠️")
 
@@ -923,49 +870,42 @@ with tab_objavi:
             st.caption("🔒 Nacrt se sprema u Sheet, ali ga **ne vidi nijedan učenik**. Poslije ga "
                        "objavljuješ u 🧪 Testovi.")
 
-        # gumb za objavu po novom obrascu
-        _moze = bool(_cilj_ucenici) or _publika == "svi"
-        if st.button("📤 Objavi odabranoj publici", type="primary", key="v2_obj_gumb2",
-                     disabled=not _moze):
+        # ---- sažetak prije objave (UX: vidiš što ćeš napraviti)
+        if _publika == "svi":
+            _moze = True
+            st.caption(f"Objava ide **svim učenicima programa `{_program}`**.")
+        else:
+            _jedinstveni = {u["ucenik_id"] for u in _cilj if u.get("ucenik_id")}
+            _moze = bool(_jedinstveni)
+            if _moze:
+                _imena = ", ".join(sorted({u.get("ime_djeteta") or u["ucenik_id"]
+                                           for u in _cilj})[:6])
+                st.caption(f"Test će dobiti **{len(_jedinstveni)}** učenika: {_imena}"
+                           + (" …" if len(_jedinstveni) > 6 else ""))
+
+        if st.button("📤 Objavi", type="primary", key="v2_obj_gumb", disabled=not _moze):
             try:
                 if _publika == "svi":
-                    _svi_u2 = []
-                    for _g in grupe.ucitaj_grupe(_sheet()):
+                    _cilj = []
+                    for _g in _grupe():
                         if model.tekst(_g.get("program")).lower() != _program:
                             continue
-                        _svi_u2 += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
-                                     "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
-                                    for u in (_g.get("ucenici") or [])
-                                    if model.tekst(u.get("ucenik_id"))]
-                    _cilj_ucenici = _svi_u2
-                _rez = dodjele.dodaj(_sheet(), d, _cilj_ucenici, dodijelio="caki")
-                if model.tekst(d.get("status")) == "nacrt":
-                    definicije.promijeni_status(_sheet(), odabir_t, "objavljen", korisnik="caki")
+                        _cilj += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
+                                   "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
+                                  for u in (_g.get("ucenici") or [])
+                                  if model.tekst(u.get("ucenik_id"))]
+                _rez = dodjele.dodaj(_sheet(), _d, _cilj, dodijelio="caki")
+                if model.tekst(_d.get("status")) == "nacrt":
+                    definicije.promijeni_status(_sheet(), _odabir_t, "objavljen", korisnik="caki")
                 st.success(f"Dodano **{_rez.get('dodano', 0)}** učenika."
                            + (f" Preskočeno (već imaju): {len(_rez.get('preskoceno') or [])}."
                               if _rez.get("preskoceno") else ""))
                 _osvjezi()
             except Exception as _e_obj:                 # noqa: BLE001
                 st.error(f"Objava nije uspjela — **{type(_e_obj).__name__}**: {_e_obj}")
-
                 with st.expander("Što provjeriti"):
-                    st.caption("· je li upis uključen (bočna traka)")
                     st.caption("· postoji li tab `Dodjele` (⚙️ Postavke → Pripremi tabove)")
-                    st.caption("· ima li test zadatke i je li spremljen")
-                    st.caption("· je li šifra upisana (npr. TEST01)")
-
-        moje = [x for x in _dodjele() if model.tekst(x.get("definicija_id")) == odabir_t]
-        if moje:
-            st.markdown(f"**Kome je poslan ({len(moje)})**")
-            st.dataframe([{
-                "Učenik": model.tekst(x.get("ime_djeteta")) or model.tekst(x.get("ucenik_id")),
-                "Šifra": model.tekst(x.get("ucenik_id")),
-                "Grupa": model.tekst(x.get("grupa")) or "—",
-                "Status": model.tekst(x.get("status")),
-                "Rok": (lambda r: f"{model.datum_hr(r['od'])} – {model.datum_hr(r['do'])}"
-                        + (" (od dodjele)" if r["produzen"] else ""))(dodjele.rok_dodjele(x, d)),
-            } for x in moje], hide_index=True, width="stretch")
-
+                    st.caption("· ima li test definiciju i barem jedan zadatak")
 
 with tab_rezultati:
     upute.prikazi(st, "rezultati")

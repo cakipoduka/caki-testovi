@@ -95,14 +95,52 @@ def ucitaj(sheet, tab: str) -> list[dict]:
         return []
 
 
+def _normal_ime(tekst) -> str:
+    """Normalizirano ime taba: bez razmaka na rubovima, mala slova, bez dijakritike."""
+    s = _kao_tekst(tekst).strip().lower()
+    for a, b in (("č", "c"), ("ć", "c"), ("ž", "z"), ("š", "s"), ("đ", "d")):
+        s = s.replace(a, b)
+    return " ".join(s.split())
+
+
+def _postojeci_tab(sheet, tab: str):
+    """Nađi tab tolerantno (isti naziv, ali razmak/velika slova/dijakritika) — ili None."""
+    try:
+        for ws in sheet.worksheets():
+            if _normal_ime(getattr(ws, "title", "")) == _normal_ime(tab):
+                return ws
+    except Exception:                                   # noqa: BLE001
+        return None
+    return None
+
+
 def osiguraj(sheet, tab: str):
-    """Vrati worksheet; ako taba nema, napravi ga sa zadanim zaglavljem (samo uz dozvoljeno pisanje)."""
+    """Vrati worksheet; ako taba nema, napravi ga sa zadanim zaglavljem (samo uz dozvoljeno pisanje).
+
+    VAŽNO (29.10.2026.): tab se prvo traži **tolerantno**. Ako Google ipak odbije `addSheet`
+    („A sheet with the name … already exists"), vraća se postojeći tab — objava ne smije pasti
+    zbog toga.
+    """
     _provjeri_pisanje()
     zaglavlje = ZAGLAVLJA.get(tab) or ["id"]
+
     try:
         return sheet.worksheet(tab)
     except Exception:                                   # noqa: BLE001
+        pass
+
+    postoji = _postojeci_tab(sheet, tab)
+    if postoji is not None:
+        return postoji
+
+    try:
         return sheet.add_worksheet(title=tab, rows=1000, cols=max(len(zaglavlje), 5))
+    except Exception as e:                              # noqa: BLE001
+        # utrka: netko je u međuvremenu napravio tab — vrati ga umjesto pada
+        postoji = _postojeci_tab(sheet, tab)
+        if postoji is not None:
+            return postoji
+        raise RuntimeError(f"Tab `{tab}` nije moguće naći ni napraviti: {e}") from e
 
 
 def osiguraj_sve(sheet) -> list[str]:

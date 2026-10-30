@@ -279,6 +279,16 @@ def ocijeni_rucno(sheet, pokusaj_id: str, zadatak_id: str, *, tocno: bool, bodov
     return False
 
 
+def _kao_bool(vrijednost):
+    """„Da"/„da"/True/„1" → True; sve ostalo (uključujući prazno) → None."""
+    tekst = model.tekst(vrijednost).lower()
+    if tekst in ("da", "1", "true", "točno", "tocno"):
+        return True
+    if tekst in ("ne", "0", "false", "netočno", "netocno"):
+        return False
+    return None
+
+
 def _upisi_rucno(sheet, redak: dict, tocno: bool, bodovi, komentar: str, profesor: str) -> bool:
     """Pomoćna: upiše ručnu ocjenu u točan redak `Ocjene_zadataka`."""
     ws = tablice.osiguraj(sheet, tablice.TAB_OCJENE)
@@ -290,6 +300,26 @@ def _upisi_rucno(sheet, redak: dict, tocno: bool, bodovi, komentar: str, profeso
     for br, red in enumerate(ws.get_all_values()[1:], start=2):
         if (i_pok < len(red) and model.tekst(red[i_pok]) == model.tekst(redak.get("pokusaj_id"))
                 and i_zad < len(red) and model.tekst(red[i_zad]) == model.tekst(redak.get("zadatak_id"))):
+            # 📝 TRAG (§12.10/§12.11.2): zapiši izmjenu PRIJE prepisivanja — prijašnja ocjena,
+            # bodovi i IZVOR (string/sympy/ai/profesor) se inače nepovratno gube.
+            try:
+                import izmjene_ocjena as _izmj
+
+                _izmj.zapisi(
+                    sheet,
+                    pokusaj_id=model.tekst(redak.get("pokusaj_id")),
+                    zadatak_id=model.tekst(redak.get("zadatak_id")),
+                    ocjena_prije=_kao_bool(redak.get("tocno")),
+                    ocjena_poslije=bool(tocno),
+                    bodovi_prije=redak.get("bodovi"),
+                    bodovi_poslije=bodovi,
+                    izvor_prije=model.tekst(redak.get("izvor_ocjene")),
+                    razlog=komentar,
+                    povod=_izmj.POVOD_PROFESOR,
+                    tko=profesor,
+                )
+            except Exception:                          # noqa: BLE001 — trag ne smije blokirati ocjenu
+                pass
             for polje, vrijednost in (("tocno", "Da" if tocno else "Ne"),
                                       ("bodovi", bodovi),
                                       ("izvor_ocjene", ocjenjivanje.IZVOR_PROFESOR),

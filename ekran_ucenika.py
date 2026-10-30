@@ -34,6 +34,26 @@ def _odgovori_kljuc(dodjela: dict) -> str:
     return _k("odg", dodjela.get("dodjela_id", "x"))
 
 
+def prikazi_tekst_s_tabelama(tekst) -> None:
+    """Prikaži tekst zadatka tako da pipe tablica postane PRAVA tablica (Caki 29.10.2026.).
+
+    Ako tablice nema — prikaz je isti kao prije (`rjesavanje.pripremi_latex`).
+    """
+    try:
+        import tabele
+
+        if not tabele.ima_tabelu(tekst):
+            st.markdown(rjesavanje.pripremi_latex(tekst))
+            return
+        for dio in tabele.podijeli(tekst):
+            if dio["tip"] == "tabela":
+                st.markdown(tabele.html_tabela(dio["sadrzaj"]), unsafe_allow_html=True)
+            elif model.tekst(dio["sadrzaj"]).strip():
+                st.markdown(rjesavanje.pripremi_latex(dio["sadrzaj"]))
+    except Exception:                                  # noqa: BLE001
+        st.markdown(rjesavanje.pripremi_latex(tekst))
+
+
 def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) -> None:
     """Cijeli ekran rješavanja za jednu dodjelu (ili pregled kad je `dry=True`)."""
     zadaci = _zadaci(definicija, dodjela)
@@ -94,7 +114,7 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
     novi = trenutni
     with st.container(border=True):
         st.markdown(f"**Zadatak {index + 1}.** ({model.broj(z.get('bodovi'), 1):g} bod.)")
-        st.markdown(rjesavanje.pripremi_latex(z.get("tekst")))
+        prikazi_tekst_s_tabelama(z.get("tekst"))
         if model.tekst(z.get("slika")):
             slike_zadataka.prikazi_sliku_html(st, z.get("slika"))
 
@@ -177,7 +197,7 @@ def prikazi_pregled_rjesenja(st, zadaci: list[dict], odgovori: dict, *,
             pokazi_bodove=pokazi_bodove)
         oznaka = "🎬 video" if red["video"] else "pregled"
         with st.expander(f"Zadatak {i + 1} — {oznaka}"):
-            st.markdown(rjesavanje.pripremi_latex(red["tekst"]))
+            prikazi_tekst_s_tabelama(red["tekst"])
             st.caption(f"Tvoj odgovor: **{red['moj_odgovor'] or '— (prazno)'}**")
             if red["pokazi_rjesenje"]:
                 st.success(f"Točno: {red['tocan_odgovor']}")

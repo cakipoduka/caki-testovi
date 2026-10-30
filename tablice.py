@@ -10,6 +10,7 @@ Pravilo: **nijedan drugi modul ne uvozi gspread.** Ako nešto treba podatke, tra
 from __future__ import annotations
 
 import re
+import threading
 
 # ------------------------------------------------------------------ tablice i zaglavlja
 
@@ -18,6 +19,7 @@ TAB_DODJELE = "Dodjele"
 TAB_POKUSAJI = "Pokusaji"
 TAB_OCJENE = "Ocjene_zadataka"
 TAB_STATISTIKA = "Statistika_zadataka"
+TAB_IZMJENE_OCJENA = "Izmjene_ocjena"
 TAB_DNEVNIK = "Dnevnik_radnji"
 TAB_RADOVI = "Radovi"
 TAB_POSJETE = "Posjete"
@@ -43,6 +45,9 @@ def _provjeri_pisanje() -> None:
 
 
 ZAGLAVLJA = {
+    "Izmjene_ocjena": ["izmjena_id", "pokusaj_id", "zadatak_id", "ocjena_prije",
+                       "ocjena_poslije", "bodovi_prije", "bodovi_poslije", "izvor_prije",
+                       "razlog", "povod", "tko", "kada"],
     TAB_DEFINICIJE: [
         "definicija_id", "ustanova_id", "naziv", "predmet", "razina", "vrsta",
         "zadaci_json", "broj_zadataka", "bodovi_ukupno", "trajanje_min",
@@ -253,9 +258,43 @@ def _zadnji_broj(postojeci, prefiks: str) -> int:
     return najveci
 
 
-def novi_id(postojeci, prefiks: str, sirina: int = 4) -> str:
-    """Sljedeći slobodan ID, npr. prefiks `T26-` → `T26-0007`."""
-    return f"{prefiks}{_zadnji_broj(postojeci, prefiks) + 1:0{sirina}d}"
+# --- zaštita od sudara ID-eva (MASTER §12.4 / §12.11.1) ---------------------------------
+_REZERVIRANI: set[str] = set()
+_REZERVIRANI_LOCK = threading.Lock()
+
+
+def _ocisti_rezervacije() -> None:
+    """Pomoćno za testove — ne koristi se u radu."""
+    with _REZERVIRANI_LOCK:
+        _REZERVIRANI.clear()
+
+
+def ima_id(sheet, tab: str, polje: str, vrijednost: str) -> bool:
+    """Postoji li taj ID već u tabu (čitanje iz Sheeta)."""
+    return _kao_tekst(vrijednost) in set(svi_idovi(sheet, tab, polje))
+
+
+def novi_id(postojeci, prefiks: str, sirina: int = 4, *, zaobidji=()) -> str:
+    """Sljedeći slobodan ID, npr. prefiks `T26-` → `T26-0007`.
+
+    **Zaštita od sudara (30.10.2026.):** ID se rezervira u procesu (Streamlit vrti više sesija u
+    istom procesu) i preskače sve koji su već rezervirani ili navedeni u `zaobidji`.
+    """
+    zauzeti = {_kao_tekst(x) for x in (postojeci or ())} | set(zaobidji or ())
+    with _REZERVIRANI_LOCK:
+        zauzeti |= _REZERVIRANI
+        broj = _zadnji_broj(zauzeti, prefiks) + 1
+        kandidat = f"{prefiks}{broj:0{sirina}d}"
+        while kandidat in zauzeti:                      # teoretski, ali neka bude sigurno
+            broj += 1
+            kandidat = f"{prefiks}{broj:0{sirina}d}"
+        _REZERVIRANI.add(kandidat)
+    return kandidat
+
+
+def novi_id_za_tab(sheet, tab: str, polje: str, prefiks: str, sirina: int = 4) -> str:
+    """Slobodan ID za tab: čita postojeće iz Sheeta, preskače rezervirane, vraća novi."""
+    return novi_id(svi_idovi(sheet, tab, polje), prefiks, sirina)
 
 
 def svi_idovi(sheet, tab: str, polje: str) -> list[str]:

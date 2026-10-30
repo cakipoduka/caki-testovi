@@ -19,7 +19,9 @@
 
 | Modul | Odgovornost | Ovisi o |
 |---|---|---|
-| `app.py` | sučelje: 4 kartice, prijava, prekidač upisa | svi |
+| `app.py` | sučelje: kartice, prijava, prekidač upisa — **⚠️ 30.10.2026.: narasao na 1420 redaka, dio poslovne logike procurio unutra, v. §7** | svi |
+| `builder.py` | slaganje testa: filtri, stranicanje, prikaz zadatka (LaTeX+slike), sažetak odabira | `model`, `banka` |
+| `tipovi.py` | katalog **9 modernih tipova zadatka** + jedinstveno ocjenjivanje po tipu — **izgrađeno 26.10., 13 testova, ⚠️ još NIJE spojeno nigdje, v. §7** | `model`, `ocjenjivanje` |
 | `tablice.py` | **jedini sloj za podatke** (Sheets danas → Supabase kasnije) | `model` |
 | `veza.py` | otvara Sheetove, odabir servisnog računa | `secrets_json` |
 | `secrets_json.py` | tolerantno čitanje JSON-a iz Secrets | — |
@@ -45,6 +47,15 @@
 | `izvjestaj.py` | 📄 HTML izvještaj za roditelje (escapirano, bez font-rizika) | `model`, `zakljucna` |
 | `pdf_izvjestaj.py` | 📄 PDF izvještaj (Vera.ttf iz reportlaba — hrvatska slova) | `model`, `zakljucna`, `reportlab` |
 | `podsjetnik.py` | 📨 koga podsjetiti (3 stanja) + tekst poruke | `model` |
+| `ucenici.py` | 🔎 pretraga učenika u CRM-u + dodjela testa po učeniku (bez šifre) | `model`, `tablice` |
+| `tabele.py` | 📊 tablični podaci u zadacima prikazani kao prava tablica | `model` |
+| `prijevod.py` | 🌐 prijevod odabranih zadataka (online test i PDF), baza se ne mijenja | `model` |
+| `predlosci.py` | 📁 predlošci testa i nacrt — isti format kao v1 | `model`, `tablice` |
+| `brend.py` | 🎨 podaci tvrtke za izvještaje — jedino mjesto koje Caki uređuje | — |
+| `samoprovjera.py` | 🩺 popis već riješenih problema, provjera u živoj verziji | `model` |
+| `skupine.py` | skupine zadataka (uvod + a,b,c) — preuzeto iz v1 `skupine_zadataka.py` | `model` |
+| `pdf_test.py` | 📄 PDF testa za ispis (zaglavlje, uputa, zadaci, slike) | `model`, `reportlab` |
+| `tex_test.py` | 📄 PDF testa preko pdflatexa — isti pipeline kao v1 Test Builder | `model` |
 
 ## 3. Model podataka
 
@@ -96,3 +107,23 @@ Zato svaki rezultat ima **trag kako je ocijenjen** (GDPR čl. 22: pravo na ljuds
 | nema pokušaja ni autosavea | `Pokusaji` + `spremi()` |
 | nema mjerenja kvalitete zadatka | `Ocjene_zadataka` → `Statistika_zadataka` |
 | prekid = izgubljeni odgovori | autosave na svaku promjenu |
+
+
+## 7. Poznati strukturni dug prije glavnog prelaska (30.10.2026., Claude)
+
+Pregled stvarnog koda (ne samo ovog dokumenta) prije odluke o prelasku na `caki-testovi` kao
+primarni sustav. Temelji (§1 pravila, poglavito #1 i #2) drže — provjereno: nijedan modul osim
+`tablice.py`/`veza.py` ne uvozi `gspread`. Tri konkretne stvari treba riješiti rano u prelasku:
+
+1. **`app.py` je prerastao pravilo #4** ("nema poslovne logike u app.py"). Tab 🧪 PDF (385 redaka)
+   sadrži panel odabranih zadataka (dodaj/ukloni/pomakni ↑↓) izravno u `app.py`, bez testova —
+   treba u `builder.py`. Tab 👥 Objavi sadrži "kome objavljujem" logiku kopiranu izravno iz v1
+   (`caki-baza-zadataka/testovi_online.py`) — treba u `dodjele.py`, čiji je to opisani posao.
+2. **`tipovi.py` postoji, testiran je (13/13), ali ga ništa ne koristi.** `ocjenjivanje.py`,
+   `ekran_ucenika.py` i `definicije.py` i dalje provjeravaju samo `if tip == "visestruki_izbor"`
+   umjesto da zovu `tipovi.ocjeni()`/`tipovi.polja()`. Spajanje je jeftino (1-2 dana) jer je
+   registar već napisan — samo tri mjesta treba promijeniti da ga pozovu.
+3. Ovaj dokument (modul-tablica) nije bio ažuriran uz 10 novih modula dodanih 28.-30.10. — pravilo
+   iz vrha dokumenta ("ažurirati kad se doda modul") nije se poštovalo pod pritiskom brzine.
+   Ažurirano ovim pregledom; **nastaviti ažurirati uz svaki novi modul od sada**, posebno jer ovo
+   postaje primarni sustav.

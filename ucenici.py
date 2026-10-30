@@ -117,3 +117,44 @@ def dodijeli_test(sheet, definicija: dict, ucenici_odabrani: list[dict],
     if isinstance(rezultat, (list, tuple, set)):
         return len(rezultat), []
     return int(rezultat or 0), []
+
+def svi_ucenici(sheet, sheet_crm=None) -> list[dict]:
+    """SVI učenici: tab `Ucenici` + grupe Upisa + kante Mature (sve generacije), bez duplikata.
+
+    Zašto: tab `Ucenici` u CRM-u ima samo trenutne (Caki: „samo 62 su u bazi"), a stariji učenici
+    (instrukcije, upisi, matura iz ranijih generacija) postoje u grupama/kantama.
+
+    Vraća [{ucenik_id, ime, grupa, izvori: [..]}] — `izvori` služi za prikaz „odakle je".
+    """
+    izlaz: dict[str, dict] = {}
+
+    def _dodaj(uid, ime, izvor):
+        uid = model.tekst(uid).upper()
+        if not uid:
+            return
+        u = izlaz.setdefault(uid, {"ucenik_id": uid, "ime": "", "grupa": "", "izvori": []})
+        if model.tekst(ime) and not u["ime"]:
+            u["ime"] = model.tekst(ime)
+        if model.tekst(izvor) and izvor not in u["izvori"]:
+            u["izvori"].append(model.tekst(izvor))
+
+    # 1) tab s učenicima (CRM)
+    for u_ in ucitaj_ucenike(sheet):
+        _dodaj(u_.get("ucenik_id") or u_.get("email") or u_.get("ime"),
+               u_.get("ime"), "Učenici")
+        if model.tekst(u_.get("grupa")):
+            izlaz[model.tekst(u_.get("ucenik_id") or u_.get("ime")).upper()]["grupa"] = \
+                model.tekst(u_.get("grupa"))
+
+    # 2) grupe Upisa + kante Mature (sve generacije)
+    try:
+        import grupe
+
+        for g in grupe.sve_grupe(sheet):
+            naziv = model.tekst(g.get("naziv")) or model.tekst(g.get("kod"))
+            for u_ in (g.get("ucenici") or []):
+                _dodaj(u_.get("ucenik_id"), u_.get("ime_djeteta"), naziv)
+    except Exception:                                  # noqa: BLE001
+        pass
+
+    return sorted(izlaz.values(), key=lambda x: (x["ime"] or x["ucenik_id"]).lower())

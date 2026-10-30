@@ -828,10 +828,13 @@ with tab_objavi:
             _svi_u: dict[str, str] = {}
             # 1) CRM baza učenika (pretraga po imenu)
             try:
-                for _u in ucenici.ucitaj_ucenike(sheet_crm()):
-                    _uid = model.tekst(_u.get("ucenik_id") or _u.get("ime")).upper()
-                    if _uid:
-                        _svi_u[_uid] = model.tekst(_u.get("ime"))
+                for _u in ucenici.svi_ucenici(_sheet(), sheet_crm()):
+                    _uid = model.tekst(_u.get("ucenik_id")).upper()
+                    if not _uid:
+                        continue
+                    _izv = ", ".join(_u.get("izvori") or [])[:40]
+                    _svi_u[_uid] = (model.tekst(_u.get("ime")) or "—") + (
+                        f" · {_izv}" if _izv else "")
             except Exception:                          # noqa: BLE001
                 pass
             # 2) ako CRM nema tab učenika — grupe

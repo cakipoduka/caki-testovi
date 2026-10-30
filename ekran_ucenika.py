@@ -119,7 +119,58 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
             slike_zadataka.prikazi_sliku_html(st, z.get("slika"))
 
         opcije = [model.tekst(o) for o in (z.get("opcije") or []) if model.tekst(o)]
-        if model.tekst(z.get("tip")) == "visestruki_izbor" and len(opcije) >= 2:
+        tip_z = model.tekst(z.get("tip"))
+
+        if tip_z == "vise_tocnih" and len(opcije) >= 2:
+            # više točnih: slova se spremaju kao „AC" (tako ih ocjenjuje `tipovi.ocjeni`)
+            _slova_sva = [chr(65 + i) for i in range(len(opcije))]
+            _odabrana = st.multiselect(
+                "Odgovor (može više)", _slova_sva,
+                default=[s for s in (trenutni or "").upper() if s in _slova_sva],
+                format_func=lambda s: f"{s}) "
+                                      f"{rjesavanje.pripremi_latex(opcije[ord(s) - 65], zamotaj=True)}",
+                key=_k("multi", pokusaj["pokusaj_id"], index))
+            novi = "".join(sorted(_odabrana))
+
+        elif tip_z == "tocno_netocno":
+            _opcije_tn = ["Točno", "Netočno"]
+            _trenutni_tn = ("Točno" if model.tekst(trenutni).lower().startswith("to")
+                            else ("Netočno" if model.tekst(trenutni) else None))
+            novi = st.radio("Odgovor", _opcije_tn,
+                            index=_opcije_tn.index(_trenutni_tn) if _trenutni_tn else None,
+                            horizontal=True,
+                            key=_k("tn", pokusaj["pokusaj_id"], index)) or ""
+
+        elif tip_z == "brojcan":
+            novi = st.text_input("Odgovor (broj)", value=model.tekst(trenutni),
+                                 placeholder="npr. 3,14",
+                                 key=_k("broj", pokusaj["pokusaj_id"], index))
+
+        elif tip_z == "popuni_praznine":
+            _praznine = z.get("praznine") or []
+            _postojeci = [d for d in model.tekst(trenutni).split("|")] if trenutni else []
+            _vrijednosti = []
+            for _i_p in range(len(_praznine)):
+                _vrijednosti.append(st.text_input(
+                    f"Praznina {_i_p + 1}",
+                    value=_postojeci[_i_p] if _i_p < len(_postojeci) else "",
+                    key=_k(f"praznina{_i_p}", pokusaj["pokusaj_id"], index)))
+            novi = "|".join(model.tekst(v) for v in _vrijednosti)
+
+        elif tip_z in ("poredak", "povezivanje"):
+            _uputa = ("Upiši stavke u traženom REDOSLIJEDU, odvojene znakom | "
+                      "(npr. 3|1|2)" if tip_z == "poredak"
+                      else "Upiši desne strane redom, odvojene znakom | (npr. b|a|c)")
+            st.caption(_uputa)
+            novi = st.text_input("Odgovor", value=model.tekst(trenutni),
+                                 key=_k("redoslijed", pokusaj["pokusaj_id"], index))
+
+        elif tip_z == "otvoreni_odgovor":
+            st.caption("Ovaj zadatak ispravlja profesor — napiši postupak.")
+            novi = st.text_area("Odgovor", value=model.tekst(trenutni), height=160,
+                                key=_k("otvoreni", pokusaj["pokusaj_id"], index))
+
+        elif tip_z == "visestruki_izbor" and len(opcije) >= 2:
             slova = [""] + [chr(65 + i) for i in range(len(opcije))]
             odabrano = st.radio(
                 "Odgovor", slova, index=slova.index(trenutni) if trenutni in slova else 0,

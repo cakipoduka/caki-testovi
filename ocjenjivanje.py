@@ -311,6 +311,43 @@ def ocjeni_zadatak(zadatak: dict, odgovor, *, pozovi=None, dopusti_ai: bool = Tr
             "zasto": "nije moguće automatski odlučiti — provjeri ručno"}
 
 
+# Tipovi koji odgovor drže kao popis odvojen znakom `|` (vidi `tipovi.ocjeni`)
+TIPOVI_S_CRTICOM = ("poredak", "povezivanje", "popuni_praznine")
+
+
+def _odgovor_za_tip(tip: str, odgovor):
+    """Pretvori pohranjeni odgovor u oblik koji `tipovi.ocjeni` očekuje.
+
+    Izvor istine je `tipovi.ocjeni`:
+      · `vise_tocnih` — **tekst slova** („AC”), funkcija radi `moj.replace(...)`,
+      · `poredak` / `povezivanje` / `popuni_praznine` — dijelovi odvojeni znakom `|`,
+      · ostali — tekst kako je upisan.
+    """
+    if isinstance(odgovor, (list, tuple)):
+        if tip == "vise_tocnih":
+            return "".join(model.tekst(x) for x in odgovor)      # lista → „AC”
+        return "|".join(model.tekst(x) for x in odgovor)
+
+    tekst = model.tekst(odgovor)
+    if not tekst:
+        return ""
+    if tip in TIPOVI_S_CRTICOM and "," in tekst and "|" not in tekst:
+        return "|".join(d.strip() for d in tekst.split(","))
+    return tekst
+
+
+def ocjeni_tipom(tip: str, zadatak: dict, odgovor) -> dict | None:
+    """Ocjena preko `tipovi.ocjeni()` — `None` ako tip nije podržan (tada staro ponašanje)."""
+    try:
+        import tipovi
+
+        if tip not in getattr(tipovi, "TIPOVI", {}):
+            return None
+        return tipovi.ocjeni(tip, zadatak, _odgovor_za_tip(tip, odgovor))
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
 def ocjeni_zadatke(zadaci: list[dict], odgovori, *, pozovi=None, dopusti_ai: bool = True) -> dict:
     """Ocijeni cijeli test. `odgovori` = {redni_broj: odgovor} (redni broj u **izmiješanom** testu).
 

@@ -62,6 +62,9 @@ ZAGLAVLJA = {
         "pokusaj_id", "dodjela_id", "definicija_id", "ucenik_id",
         "pocetak", "zadnja_aktivnost", "predaja", "trajanje_s",
         "odgovori_json", "bodovi", "bodovi_max", "status", "predano_po_roku",
+        # 30.10.2026. (§12.11.4): ZAMRZNUTI zadaci koje je učenik stvarno vidio.
+        # Prije se svaki put iznova čitalo iz TRENUTNE definicije → nije bilo dokaza što je vidio.
+        "zadaci_json",
     ],
     TAB_OCJENE: [
         "pokusaj_id", "zadatak_id", "redni_broj", "odgovor", "tocno", "bodovi", "max",

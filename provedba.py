@@ -189,22 +189,100 @@ def spremi(sheet, pokusaj: dict, novi_odgovori: dict, *, sada=None) -> bool:
 
 # ------------------------------------------------------------------ predaja
 
-def zadaci_za_pokusaj(definicija: dict, dodjela: dict) -> list[dict]:
-    """Zadaci u redoslijedu koji učenik vidje (A/B miješanje po seedu dodjele)."""
+def _zadaci_iz_snimke(pokusaj: dict) -> list:
+    """Zadaci iz snimke pokušaja (`zadaci_json`) — što je učenik STVARNO dobio (§12.11.4)."""
+    import json
+
+    tekst = model.tekst((pokusaj or {}).get("zadaci_json"))
+    if not tekst:
+        return []
+    try:
+        podaci = json.loads(tekst)
+    except Exception:                                   # noqa: BLE001
+        return []
+    return podaci if isinstance(podaci, list) else []
+
+
+def zamrzni_zadatke(sheet, pokusaj_id: str, zadaci: list) -> bool:
+    """Upiši snimku zadataka u pokušaj (jednom). Nikad ne ruši rješavanje."""
+    import json
+
+    pid = model.tekst(pokusaj_id)
+    if not pid or not zadaci:
+        return False
+    try:
+        for red in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI):
+            if model.tekst(red.get("pokusaj_id")) != pid:
+                continue
+            if model.tekst(red.get("zadaci_json")):
+                return True                             # već zamrznuto
+            return bool(tablice.azuriraj(
+                sheet, tablice.TAB_POKUSAJI, "pokusaj_id", pid,
+                {"zadaci_json": json.dumps(zadaci, ensure_ascii=False)}))
+    except Exception:                                   # noqa: BLE001
+        return False
+    return False
+
+
+def zadaci_za_pokusaj(definicija: dict, dodjela: dict, sheet=None, pokusaj=None) -> list[dict]:
+    """Zadaci u redoslijedu koji učenik vidje (A/B miješanje po seedu dodjele).
+
+    **§12.11.4:** ako pokušaj ima snimku (`zadaci_json`), vraća se ONA — promjena definicije više
+    ne može promijeniti test ispod učenika. Bez snimke ponašanje je kao prije (uz zamrzavanje kad
+    su `sheet` i `pokusaj` zadani).
+    """
+    snimka = _zadaci_iz_snimke(pokusaj or {})
+    if snimka:
+        return snimka
+
     sirovi = definicije.zadaci(definicija)
     try:
         pravilo = model.kao_json((definicija or {}).get("varijanta_pravilo"))
-    except Exception:                                  # noqa: BLE001
+    except Exception:                                   # noqa: BLE001
         pravilo = []
     postavke = pravilo if isinstance(pravilo, dict) else {}
     mijesaj_z = postavke.get("mijesaj_zadatke", True)
     mijesaj_o = postavke.get("mijesaj_odgovore", True)
+
     if not mijesaj_z and not mijesaj_o:
-        return sirovi
-    seed = model.tekst((dodjela or {}).get("varijanta_seed")) or model.tekst((dodjela or {}).get("ucenik_id"))
-    if not mijesaj_z:                                  # samo odgovori — redoslijed zadataka ostaje
-        return definicije.izmijesaj_odgovore(sirovi, seed) if mijesaj_o else sirovi
-    return definicije.izmijesaj(sirovi, seed, mijesaj_odgovore=mijesaj_o)
+        izlaz = sirovi
+    else:
+        seed = (model.tekst((dodjela or {}).get("varijanta_seed"))
+                or model.tekst((dodjela or {}).get("ucenik_id")))
+        if not mijesaj_z:
+            izlaz = definicije.izmijesaj_odgovore(sirovi, seed) if mijesaj_o else sirovi
+        else:
+            izlaz = definicije.izmijesaj(sirovi, seed, mijesaj_odgovore=mijesaj_o)
+
+    # zamrzni prvi put (samo ako je pisanje dopušteno i pokušaj postoji)
+    if sheet is not None and pokusaj:
+        try:
+            if not _zadaci_iz_snimke(pokusaj):
+                zamrzni_zadatke(sheet, pokusaj.get("pokusaj_id"), izlaz)
+        except Exception:                               # noqa: BLE001
+            pass
+    return izlaz
+
+
+def _zapisi_statistiku(sheet, pokusaj: dict, definicija: dict, zadaci: list[dict],
+                       odgovori: dict) -> int:
+    """📈 Append u `Statistika_zadataka` nakon predaje (§12.11.3). Nikad ne ruši predaju.
+
+    Jedan redak po zadatku, s vremenskom oznakom — povijest se NE prepisuje (append-only), što je
+    preduvjet za kasniju IRT analizu.
+    """
+    try:
+        import statistika
+
+        pid = model.tekst(pokusaj.get("pokusaj_id"))
+        ocjene = [r for r in tablice.ucitaj(sheet, tablice.TAB_OCJENE)
+                  if model.tekst(r.get("pokusaj_id")) == pid]
+        return statistika.zapisi_predaju(
+            sheet, pokusaj_id=pid,
+            definicija_id=model.tekst(definicija.get("definicija_id")),
+            zadaci=zadaci, odgovori=odgovori, ocjene=ocjene)
+    except Exception:                                   # noqa: BLE001
+        return 0
 
 
 def predaj(sheet, pokusaj: dict, definicija: dict, *, odgovori_=None, sada=None, pozovi=None,
@@ -219,7 +297,7 @@ def predaj(sheet, pokusaj: dict, definicija: dict, *, odgovori_=None, sada=None,
 
     dodjela = next((d for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE)
                     if model.tekst(d.get("dodjela_id")) == model.tekst(pokusaj.get("dodjela_id"))), {})
-    zadaci = zadaci_za_pokusaj(definicija, dodjela)
+    zadaci = zadaci_za_pokusaj(definicija, dodjela, sheet=sheet, pokusaj=pokusaj)
     odg = odgovori(pokusaj)
     ocjena = ocjenjivanje.ocjeni_zadatke(
         zadaci, {model.cijeli(k, -1): v for k, v in odg.items()}, pozovi=pozovi, dopusti_ai=dopusti_ai)
@@ -240,6 +318,13 @@ def predaj(sheet, pokusaj: dict, definicija: dict, *, odgovori_=None, sada=None,
                      {"status": "predano"})
 
     _upisi_ocjene(sheet, pokusaj, ocjena)
+
+    # 📈 statistika zadatka (append) — poslije ocjena, jer se p i distraktori čitaju iz njih
+    try:
+        _zapisi_statistiku(sheet, pokusaj, definicija, zadaci, odg)
+    except Exception:                                   # noqa: BLE001
+        pass
+
     return {"bodovi": ocjena["bodovi"], "maks": ocjena["maks"], "status": status,
             "ceka_profesora": ocjena["ceka_profesora"], "detalji": ocjena["detalji"],
             "postotak": ocjenjivanje.postotak(ocjena["bodovi"], ocjena["maks"])}

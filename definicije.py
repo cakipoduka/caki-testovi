@@ -296,41 +296,91 @@ def nacrti(sheet) -> list[dict]:
 
 # ------------------------------------------------------------------ uređivanje (Cakijevo pitanje 26.10.2026.)
 
+def _danas(vrijednost=None):
+    """Današnji datum kao `date` (ili zadani string pretvoren u datum)."""
+    from datetime import date, datetime
+
+    if vrijednost is None:
+        return date.today()
+    if isinstance(vrijednost, date):
+        return vrijednost
+    tekst = model.tekst(vrijednost)
+    for obrazac in ("%Y-%m-%d", "%d.%m.%Y.", "%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return datetime.strptime(tekst, obrazac).date()
+        except ValueError:
+            continue
+    return date.today()
+
+
+def rok_dijela(definicija: dict):
+    """(rok_od, rok_do) kao `date` ili (None, None) — iz definicije testa i dodjele."""
+    d = definicija or {}
+    od = _danas(d.get("rok_od")) if model.tekst(d.get("rok_od")) else None
+    do = _danas(d.get("rok_do")) if model.tekst(d.get("rok_do")) else None
+    return od, do
+
+
+def pokusaji_testa(sheet, definicija_id: str) -> list[dict]:
+    """Svi pokušaji testa — preko `Dodjele` (ključ je `dodjela_id`, ne `definicija_id`).
+
+    Ovo je popravak MASTER §12.4.1: prije se tražilo po `definicija_id` i rezultat se ignorirao.
+    """
+    did = model.tekst(definicija_id)
+    if not did or sheet is None:
+        return []
+    try:
+        dodjele_testa = [model.tekst(r.get("dodjela_id"))
+                         for r in tablice.ucitaj(sheet, tablice.TAB_DODJELE)
+                         if model.tekst(r.get("definicija_id")) == did]
+    except Exception:                                  # noqa: BLE001
+        return []
+    if not dodjele_testa:
+        return []
+    try:
+        return [r for r in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
+                if model.tekst(r.get("dodjela_id")) in dodjele_testa]
+    except Exception:                                  # noqa: BLE001
+        return []
+
+
 def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
     """Smije li se test mijenjati sada? Vraća (smije, razlog).
 
-    Pravilo (dogovoreno 26.10.2026.):
-      · **nacrt** — smije, uvijek;
-      · **objavljen, a rok još nije počeo** — smije (nitko ga još nije vidio);
-      · **objavljen i rok je počeo** — **ne smije** (učenici već rješavaju; promjena bi im
-        promijenila test pod rukama);
-      · ako **postoji ijedan pokušaj** — ne smije, bez obzira na status.
+    Redoslijed (popravljeno 30.10.2026., MASTER §12.4.1):
+      1. **arhiviran** → ne;
+      2. **postoji ijedan pokušaj** (u tijeku ili predan) → **ne** — bez obzira na status, jer bi
+         učenici dobili drugi test od onoga što su počeli (dokaz se ne može rekonstruirati);
+      3. **nacrt / zatvoren bez pokušaja** → da;
+      4. **objavljen, rok nije počeo** → da; **rok je počeo** → ne.
     """
     d = definicija or {}
     did = model.tekst(d.get("definicija_id"))
-    _status = model.tekst(d.get("status"))
-    if _status == "arhiviran":
+    status = model.tekst(d.get("status"))
+
+    if status == "arhiviran":
         return False, "Test je arhiviran — ne mijenja se."
-    # `zatvoren` = nedostupan učenicima (Caki ga je namjerno pauzirao) → SMIJE se uređivati
-    if _status == "zatvoren":
-        return True, "Test je nedostupan učenicima — mijenja se slobodno."
-    if did:
-        try:
-            if provedba.pokusaji_ucenika(sheet, did):
-                # pokušaji_ucenika traži dodjela_id; ovo je samo gruba zaštita ako se promijeni API
-                pass
-        except Exception:                              # noqa: BLE001
-            pass
-    danas = model.datum(danas) or model.sada().date()
-    od = model.datum(d.get("rok_od"))
-    if _status in ("nacrt", "zatvoren"):
-        return True, "Nacrt/nedostupan — mijenja se slobodno."
-    if od and danas < od:
-        return True, f"Objavljen, ali rok počinje {model.datum_hr(od)} — još se smije mijenjati."
-    if od:
-        return False, (f"Rok je počeo {model.datum_hr(od)} — učenici već mogu rješavati, "
-                       "test se više ne mijenja.")
-    return False, "Test je objavljen bez roka — promjena bi utjecala na učenike."
+
+    pokusaji = pokusaji_testa(sheet, did)
+    if pokusaji:
+        predanih = sum(1 for p in pokusaji
+                       if model.tekst(p.get("status")).lower() in ("predan", "predano", "ocjenjen"))
+        detalj = (f"{predanih} predanih" if predanih else
+                  f"{len(pokusaji)} u tijeku")
+        return False, (f"Test ima **{len(pokusaji)} pokušaja** ({detalj}) — mijenjanje bi "
+                       "promijenilo test onima koji su ga već počeli rješavati.")
+
+    if status in ("nacrt", "zatvoren"):
+        return True, ("Nacrt — mijenja se slobodno." if status == "nacrt"
+                      else "Nedostupan je učenicima i nitko ga nije počeo — mijenja se slobodno.")
+
+    od, _do = rok_dijela(d)
+    danas = _danas(danas)
+    if od and danas and danas >= od:
+        return False, f"Rok je počeo {model.datum_hr(od)} — učenici ga mogu rješavati."
+    return True, ("Rok još nije počeo — smije se mijenjati."
+                  if od else "Bez roka i bez pokušaja — smije se mijenjati.")
+
 
 
 def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "caki",

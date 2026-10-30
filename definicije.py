@@ -383,6 +383,49 @@ def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
 
 
 
+def obrisi(sheet, definicija_id: str, *, korisnik: str = "") -> tuple[bool, str]:
+    """Obriši test. Vraća (uspjeh, razlog).
+
+    Pravila:
+      · **ima pokušaja** → NE briše se (dokaz; predlaži arhiviranje),
+      · ima dodjela bez pokušaja → brišu se dodjele, zatim test,
+      · svaka radnja se zapisuje u `Dnevnik_radnji`.
+    """
+    did = model.tekst(definicija_id)
+    if not did:
+        return False, "Nedostaje ID testa."
+    d = po_id(sheet, did)
+    if not d:
+        return False, "Test ne postoji."
+
+    pokusaji = pokusaji_testa(sheet, did)
+    if pokusaji:
+        return False, (f"Test ima **{len(pokusaji)} pokušaja** — ne briše se (to je dokaz). "
+                       "Predlažem **arhiviranje** (status `arhiviran`).")
+
+    obrisane_dodjele = 0
+    try:
+        for red in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
+            if model.tekst(red.get("definicija_id")) != did:
+                continue
+            if tablice.obrisi(sheet, tablice.TAB_DODJELE, "dodjela_id",
+                              model.tekst(red.get("dodjela_id"))):
+                obrisane_dodjele += 1
+    except Exception as e:                              # noqa: BLE001
+        return False, f"Dodjele nije moguće obrisati: {e}"
+
+    if not tablice.obrisi(sheet, tablice.TAB_DEFINICIJE, "definicija_id", did):
+        return False, "Test nije obrisan (redak nije nađen)."
+
+    try:
+        tablice.zapisi_radnju(sheet, korisnik or "caki", "obrisan_test", did,
+                              f"{model.tekst(d.get('naziv'))}; dodjela obrisano: {obrisane_dodjele}")
+    except Exception:                                   # noqa: BLE001
+        pass
+    return True, (f"Test obrisan." + (f" Uz njega i {obrisane_dodjele} dodjela."
+                                      if obrisane_dodjele else ""))
+
+
 def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "caki",
              danas=None) -> dict:
     """Izmijeni test ako je dopušteno. Vraća novi zapis (ili baca `ValueError` s razlogom)."""

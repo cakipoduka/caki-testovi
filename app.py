@@ -311,6 +311,24 @@ with tab_testovi:
         } for x in _testovi_lista], hide_index=True, width="stretch")
 
         st.divider()
+        # 🗑 BRISANJE TESTA (Caki 31.10.2026.) — uz potvrdu, čuva dokaze
+        with st.expander("🗑 Obriši test"):
+            st.caption("Brisanje je trajno. Test s **ijednim pokušajem** ne može se obrisati — tada ga **arhiviraj** (podaci ostaju kao dokaz).")
+            _potvrda = st.checkbox("Potvrđujem da želim trajno obrisati ovaj test",
+                                   key="v2_brisi_potvrda")
+            if st.button("🗑 Obriši test", type="secondary", key="v2_brisi_test",
+                         disabled=not _potvrda):
+                _ok, _razlog = definicije.obrisi(_sheet(), odabir_t, korisnik="caki")
+                if _ok:
+                    st.success(_razlog)
+                    _osvjezi()
+                else:
+                    st.error(_razlog)
+                    if "pokušaja" in _razlog:
+                        st.caption("Savjet: ostavi test u statusu `arhiviran` — skriva "
+                                   "se iz popisa, a rezultati i dokazi ostaju.")
+
+        st.divider()
         _opcije_l = {model.tekst(x.get("definicija_id")): x for x in _testovi_lista}
         _odabir_l = st.selectbox("Odaberi test za radnje", list(_opcije_l),
                                  format_func=lambda i: f"{model.tekst(_opcije_l[i].get('naziv'))} · "

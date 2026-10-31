@@ -27,6 +27,7 @@ import veza
 import posjete
 import provedba
 import radovi
+import zavrsetak
 from veza import sheet_crm
 
 st.set_page_config(page_title="CAKI — Testovi", page_icon="📝", layout="centered")
@@ -129,7 +130,10 @@ def _kartica(dodjela: dict, definicija: dict, pokusaj) -> None:
                     except Exception as e:              # noqa: BLE001
                         st.error(f"Rad nije poslan: {e}")
 
-        if pokusaj and model.tekst(pokusaj.get("status")) == provedba.STATUS_PREDANO:
+        if pokusaj and zavrsetak.je_zavrsen(pokusaj):
+            # 31.10.2026.: „po isteku" je također završen test (prije se ovdje nudio „Nastavi").
+            if zavrsetak.predan_po_isteku(pokusaj):
+                st.warning("⏰ Vrijeme je isteklo — test je automatski predan.")
             bod = model.broj(pokusaj.get("bodovi"))
             maks = model.broj(pokusaj.get("bodovi_max"))
             postotak = int(round(100 * bod / maks)) if maks else 0

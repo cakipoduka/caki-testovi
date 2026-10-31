@@ -45,6 +45,7 @@ from veza import sheet_baze, sheet_crm
 import predlosci
 import pdf_izvjestaj
 import radovi
+import uvoz_v1
 
 st.set_page_config(page_title="CAKI — Testovi v2", page_icon="🧪", layout="wide")
 
@@ -1349,7 +1350,11 @@ with tab_ucenik:
                     st.caption(f"Rok: **{model.datum_hr(dodjela_u.get('rok_od')) or '—'}** – "
                                f"**{model.datum_hr(dodjela_u.get('rok_do')) or '—'}** · stanje: **{stanje_u}**")
                     if provedba.predano(_sheet(), dodjela_u.get("dodjela_id")):
-                        st.success("Učenik je već predao — vidi 📊 Rezultati.")
+                        # 31.10.2026.: poslije predaje učenik ima 2. korak (slike postupka) —
+                        # zato se prikazuje završnica, a ne samo poruka „već predao".
+                        _predan = provedba.zadnji_predani(_sheet(), dodjela_u.get("dodjela_id"))
+                        ekran_ucenika.prikazi_zavrsnicu(st, _sheet(), d_u, dodjela_u,
+                                                        pokusaj=_predan)
                     elif stanje_u != "otvoren":
                         st.warning("Rok još nije otvoren ili je prošao — rješavanje nije moguće.")
                     else:
@@ -1381,6 +1386,76 @@ with tab_postavke:
     testovi_svi = _testovi()
     c2.metric("Testova", len(testovi_svi))
     c3.metric("Dodjela", len(_dodjele()))
+
+    # --- 📥 uvoz rezultata iz v1 (31.10.2026., Cakijev zahtjev: „simulacija državne mature")
+    with st.expander("📥 Uvoz rezultata iz v1 (npr. simulacija državne mature)", expanded=False):
+        _uputa_uvoz = (
+            "Rezultati iz **v1** (`Testovi_zakazani` / `Rezultati_testova`) prenose se u v2 kao "
+            "**arhivski** test: učenik vidi iste zadatke koje je rješavao, svoje bodove i pregled. "
+            "Test se upisuje kao **arhiviran** (ne može se ponovno zadati), a uvoz je **idempotentan** "
+            "— drugi klik ne pravi duplikate.")
+        st.caption(_uputa_uvoz)
+        _upit_uvoz = st.text_input("Traži v1 test po nazivu", value="simulacij",
+                                   key="v2_uvoz_upit")
+        try:
+            _kandidati = uvoz_v1.pronadji_testove(_sheet(), _upit_uvoz) if _upit_uvoz else []
+        except Exception as _e_k:                       # noqa: BLE001
+            _kandidati = []
+            st.error(f"v1 tabovi se ne mogu pročitati: {_e_k}")
+        if not _kandidati:
+            st.caption("Nema v1 testa koji odgovara upitu.")
+        else:
+            _opcije_uvoz = {g["naziv"]: g for g in _kandidati}
+            _naziv_uvoz = st.selectbox(
+                "v1 test", list(_opcije_uvoz),
+                format_func=lambda n: f"{n} · {_opcije_uvoz[n]['broj_rezultata']} rezultata · "
+                                      f"{len(_opcije_uvoz[n]['test_idovi'])} redaka u v1",
+                key="v2_uvoz_test")
+            if st.button("🔎 Pripremi uvoz (ništa se ne piše)", key="v2_uvoz_pripremi"):
+                try:
+                    st.session_state["v2_uvoz_nacrt"] = uvoz_v1.pripremi(_sheet(), _naziv_uvoz)
+                except Exception as _e_p:               # noqa: BLE001
+                    st.session_state.pop("v2_uvoz_nacrt", None)
+                    st.error(f"Priprema nije uspjela: {_e_p}")
+
+            _nacrt = st.session_state.get("v2_uvoz_nacrt")
+            if _nacrt and model.tekst(_nacrt.get("naziv")) == model.tekst(_naziv_uvoz):
+                st.success(
+                    f"**{_nacrt['naziv']}** — {_nacrt['broj_zadataka']} zadataka, "
+                    f"{_nacrt['bodovi_ukupno']:g} bodova · **{len(_nacrt['dodjele'])}** učenika za "
+                    f"uvoz · {len(_nacrt['preskoceno'])} preskočeno · "
+                    f"{len(_nacrt['ocjene'])} ocjena po zadatku")
+                st.caption(f"Definicija: `{_nacrt['definicija_id']}`"
+                           + (f" (već postoji — dodaju se samo učenici koji fale)"
+                              if _nacrt.get("vec_uvezeno") else " (nova, ide u arhiv)"))
+                if _nacrt["ucenici"]:
+                    st.dataframe(
+                        [{"Učenik": u["ime_djeteta"] or u["ucenik_id"], "Šifra": u["ucenik_id"],
+                          "Bodovi": f"{u['bodovi']:g} / {u['bodovi_max']:g}"}
+                         for u in _nacrt["ucenici"]],
+                        hide_index=True, width="stretch")
+                for _pu in _nacrt.get("upozorenja") or []:
+                    st.warning(_pu)
+                if _nacrt["dodjele"]:
+                    _potvrda = st.checkbox(
+                        "Potvrđujem upis u **živi** CRM Sheet (v2 tabovi)", key="v2_uvoz_potvrda")
+                    if st.button("📥 Uvezi u v2", type="primary", disabled=not _potvrda,
+                                 key="v2_uvoz_izvrsi"):
+                        try:
+                            _rez = uvoz_v1.izvrsi(_sheet(), _nacrt)
+                        except Exception as _e_i:       # noqa: BLE001
+                            st.error(f"Uvoz nije uspio: {_e_i}")
+                        else:
+                            st.session_state.pop("v2_uvoz_nacrt", None)
+                            st.success(
+                                f"Uvezeno: definicija **{_rez['definicija']}**, dodjele "
+                                f"**{_rez['dodjele']}**, pokušaji **{_rez['pokusaji']}**, ocjene "
+                                f"**{_rez['ocjene']}**. Učenici to vide pod 📝 Testovi, a ti u "
+                                "📊 Rezultati.")
+                            st.cache_data.clear()
+                            st.rerun()
+                else:
+                    st.info("Svi učenici ovog testa su već uvezeni — nema novih redaka.")
 
     # --- baza zadataka
     with st.expander("🩺 Provjera baze", expanded=not _zadaci()):

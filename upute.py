@@ -105,11 +105,17 @@ UPUTE = {
             "Kratki odgovor upisuje se u **matematičko polje** (MathLive); ako polje ne radi, ostaje "
             "običan tekst.",
             "Odgovor se **sprema sam** — prekid veze ne briše rad.",
-            "Predaja pokazuje **koliko je prazno** i traži potvrdu.",
+            "**Zadnjih 5 minuta** timer blinka i piše da se bliži kraj pisanja — ne zaboravi predati.",
+            "Kad vrijeme istekne, test se **predaje automatski** — nakon toga nema novih odgovora ni "
+            "naknadne predaje.",
+            "Poslije predaje učenik **pošalje slike svog postupka (može više) ili PDF**, ili potvrdi "
+            "da nema postupka — pa tek tada piše „Test je završen“. Profesor te slike pregleda.",
         ],
         "pazi": [
             "U pregledu je autosave isključen — ništa se ne zapisuje u Sheet.",
             "🎬 video i točna rješenja vide se **tek kad Student View to dopušta** (rješenja nakon roka).",
+            "Slike postupka idu u Drive folder `RADOVI_FOLDER_ID`; ako upload ne radi, učenik može "
+            "poslati poveznicu — rad se ne smije izgubiti.",
         ],
         "dalje": "Rezultati su u kartici 📊 Rezultati.",
     },

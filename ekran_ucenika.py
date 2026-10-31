@@ -10,15 +10,20 @@ Odvojeno od `app.py` namjerno: isti modul sutra koristi portal učenika.
 """
 from __future__ import annotations
 
+import time
+
 import streamlit as st
 
 import ai_pomoc
+import dodjele
+import drive
 import model
 import ocjenjivanje
 import provedba
 import rjesavanje
 import slike_zadataka
 import unos_odgovora
+import zavrsetak
 
 
 def _k(*dijelovi) -> str:
@@ -64,6 +69,7 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
     k_odg = _odgovori_kljuc(dodjela)
     k_pit = _k("pitanje", dodjela.get("dodjela_id", "x"))
     k_pok = _k("pokusaj", dodjela.get("dodjela_id", "x"))
+    k_gotov = _k("gotov", dodjela.get("dodjela_id", "x"))
     st.session_state.setdefault(k_odg, {})
     st.session_state.setdefault(k_pit, 0)
 
@@ -75,23 +81,39 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
             "odgovori_json": "{}", "dodjela_id": "PREGLED",
         })
     else:
+        gotov = st.session_state.get(k_gotov)
+        if gotov:
+            prikazi_zavrsnicu(st, sheet, definicija, dodjela, pokusaj=gotov)
+            return
         pokusaj = st.session_state.get(k_pok)
         if not pokusaj:
-            pokusaj = provedba.zapocni(sheet, dodjela, definicija)
+            # 31.10.2026.: ako je test već predan (npr. poslije F5 ili povratka na stranicu),
+            # učenik ide na ZAVRŠNICU (slanje postupka), a ne dobiva samo „već predano".
+            predan = provedba.zadnji_predani(sheet, dodjela.get("dodjela_id"))
+            if predan:
+                st.session_state[k_gotov] = predan
+                prikazi_zavrsnicu(st, sheet, definicija, dodjela, pokusaj=predan)
+                return
+            try:
+                pokusaj = provedba.zapocni(sheet, dodjela, definicija)
+            except ValueError as e:                     # rok / već predano — ne rušiti stranicu
+                st.error(f"Test se ne može otvoriti: {e}")
+                return
             st.session_state[k_pok] = pokusaj
 
-    # --- traka: vrijeme i napredak
-    istice = provedba.vrijeme_isteka(pokusaj, definicija)
-    odgovori = st.session_state[k_odg]
-    nap = rjesavanje.napredak(zadaci, odgovori)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Preostalo", model.preostalo_tekst(istice) if istice else "—")
-    c2.metric("Bodova ukupno", f"{model.broj(definicija.get('bodovi_ukupno')):g}")
-    c3.metric("Odgovoreno", f"{nap['odgovoreno']}/{nap['ukupno']}")
-    st.progress(nap["postotak"] / 100)
+    # --- ⏰ vrijeme isteklo → AUTOMATSKA PREDAJA (31.10.2026., Cakijev zahtjev)
+    # Provjera ide PRIJE crtanja pitanja: nakon isteka učenik ne dobiva polja za unos, pa
+    # naknadni odgovori nisu mogući. Živu provjera radi i fragment `_traka` (svake sekunde).
+    if not dry and zavrsetak.treba_auto_predaju(pokusaj, definicija):
+        _auto_predaj(st, sheet, pokusaj, definicija)
+        return
 
-    if istice and model.sada() > istice:
-        st.warning("⏰ Vrijeme je isteklo — predaj test. Rezultat se označava kao predan po isteku.")
+    # --- traka: vrijeme (blinka zadnjih 5 minuta), bodovi i napredak
+    odgovori = st.session_state[k_odg]
+    try:
+        _traka(st, sheet, definicija, dodjela, pokusaj, zadaci, odgovori, dry)
+    except Exception:                                   # noqa: BLE001 — traka ne smije srušiti test
+        _traka_sadrzaj(st, definicija, pokusaj, zadaci, odgovori)
 
     # --- navigacija po pitanjima
     index = max(0, min(len(zadaci) - 1, int(st.session_state.get(k_pit, 0))))
@@ -210,31 +232,232 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
             except Exception:                          # noqa: BLE001 — autosave ne blokira
                 st.caption("⚠️ Automatsko spremanje trenutno ne radi — odgovor je još na ekranu.")
 
-    # --- predaja
+    # --- predaja (1. korak: POŠALJI ODGOVORE)
     st.divider()
     sazetak = rjesavanje.sto_nedostaje(zadaci, st.session_state[k_odg])
-    if sazetak["prazno"]:
-        st.info(sazetak["poruka"])
-    with st.expander("✅ Predaj test", expanded=bool(sazetak["prazno"])):
+    st.markdown("### 📤 Predaja testa")
+    st.caption(zavrsetak.tekst_koraka_1(sazetak["prazno"], sazetak["ukupno"]))
+    with st.expander("👀 Provjeri odgovore prije predaje (koji su odgovoreni, koji nisu)"):
         for red in rjesavanje.sazetak_predaje(zadaci, st.session_state[k_odg]):
             st.caption(red)
-        if st.button("✅ Predaj", type="primary", key=_k("predaj", pokusaj["pokusaj_id"])):
-            try:
-                if dry:
-                    ocj = ocjenjivanje.ocjeni_zadatke(
-                        zadaci, {int(k): v for k, v in st.session_state[k_odg].items()},
+    if st.button("📤 POŠALJI ODGOVORE", type="primary", use_container_width=True,
+                 key=_k("predaj", pokusaj["pokusaj_id"])):
+        try:
+            if dry:
+                ocj = ocjenjivanje.ocjeni_zadatke(
+                    zadaci, {int(k): v for k, v in st.session_state[k_odg].items()},
+                    dopusti_ai=False)
+                st.success(f"🧪 Pregled: {rjesavanje.rezultat_tekst(ocj['bodovi'], ocj['maks'])} "
+                           "— ništa nije spremljeno.")
+                st.info(zavrsetak.tekst_koraka_2())
+                st.caption("Pregled: u pravom testu ovdje su dva gumba — **pošalji slike postupka** "
+                           "ili **nema postupka** — i nakon njih „Test je završen“.")
+            else:
+                provedba.predaj(sheet, pokusaj, definicija,
+                                odgovori_=st.session_state[k_odg], dopusti_ai=False)
+                st.session_state.pop(k_pok, None)       # sljedeći prikaz = završnica (korak 2)
+                st.rerun()
+        except Exception as e:                          # noqa: BLE001 — Caki/učenik mora vidjeti
+            st.error(f"Predaja nije uspjela: {e}")
+            st.caption("Odgovori su spremljeni — pokušaj predati ponovno ili javi profesoru.")
+
+
+# ================================================================ traka s vremenom
+
+def _timer_html(stanje: dict) -> str:
+    """Timer; u zadnjih 5 minuta **blinka** crveno (Cakijev zahtjev 31.10.2026.)."""
+    if stanje.get("istekao"):
+        return ('<div style="font-size:0.95rem;opacity:.75;">Preostalo</div>'
+                '<div style="font-size:1.6rem;font-weight:700;color:#c62828;">⏰ isteklo</div>')
+    if stanje.get("blizi_se"):
+        stil = ("<style>@keyframes v2blink{0%,100%{opacity:1}50%{opacity:.15}}"
+                ".v2-blink{animation:v2blink 1s ease-in-out infinite;}</style>")
+        boja, klasa = "#c62828", " v2-blink"
+    else:
+        stil, boja, klasa = "", "#1f1f1f", ""
+    return (
+        stil
+        + '<div style="font-size:0.95rem;opacity:.75;">Preostalo</div>'
+        + f'<div class="v2-timer{klasa}" style="font-size:1.6rem;font-weight:700;color:{boja};">'
+        + f'⏳ {stanje.get("tekst", "")}</div>'
+    )
+
+
+def _traka_sadrzaj(st, definicija: dict, pokusaj: dict, zadaci: list, odgovori: dict) -> dict:
+    """Jedna traka: timer, bodovi, napredak i upozorenje pred kraj. Vraća stanje vremena."""
+    v = zavrsetak.stanje_vremena(pokusaj, definicija)
+    nap = rjesavanje.napredak(zadaci, odgovori)
+    c1, c2, c3 = st.columns(3)
+    c1.markdown(_timer_html(v), unsafe_allow_html=True)
+    c2.metric("Bodova ukupno", f"{model.broj(definicija.get('bodovi_ukupno')):g}")
+    c3.metric("Odgovoreno", f"{nap['odgovoreno']}/{nap['ukupno']}")
+    st.progress(nap["postotak"] / 100)
+    if v["blizi_se"]:
+        st.warning(zavrsetak.tekst_upozorenja(v["preostalo_s"]))
+    elif v["istekao"]:
+        st.error(zavrsetak.tekst_isteka(auto=True))
+    return v
+
+
+def _traka_fragment(st, sheet, definicija: dict, dodjela: dict, pokusaj: dict,
+                    zadaci: list, odgovori: dict, dry: bool):
+    """Fragment se sam osvježava svake sekunde — timer ide i bez klika učenika.
+
+    U trenutku isteka predaje test bez ikakve radnje učenika (nema naknadnog unosa).
+    """
+    v = _traka_sadrzaj(st, definicija, pokusaj, zadaci, odgovori)
+    if (not dry) and v["istekao"] and zavrsetak.treba_auto_predaju(pokusaj, definicija):
+        _auto_predaj(st, sheet, pokusaj, definicija)
+
+
+def _traka(*args, **kwargs):
+    """Omotač: na starijem Streamlitu (bez `st.fragment`) traka samo nema samostalno osvježavanje."""
+    return _traka_fragment(*args, **kwargs)
+
+
+if hasattr(st, "fragment"):
+    try:
+        _traka = st.fragment(run_every="1s")(_traka_fragment)   # noqa: F811 — namjerno
+    except Exception:                                   # noqa: BLE001 — stariji Streamlit
+        pass
+
+
+def _auto_predaj(st, sheet, pokusaj: dict, definicija: dict) -> None:
+    """Predaj pokušaj jer je vrijeme isteklo, pa osvježi stranicu na završnicu (korak 2).
+
+    Zaštita od ponavljanja: fragment se osvježava svake sekunde, pa se automatska predaja
+    pokušava najviše svakih 10 s (greška u mreži ne smije zatrpavati Sheet upisima).
+    """
+    k_auto = _k("auto", pokusaj.get("pokusaj_id", "x"))
+    k_pok = _k("pokusaj", pokusaj.get("dodjela_id", "x"))
+    k_gotov = _k("gotov", pokusaj.get("dodjela_id", "x"))
+    zadnji = st.session_state.get(k_auto)
+    sada = time.time()
+    if isinstance(zadnji, (int, float)) and (sada - zadnji) < 10:
+        return
+    st.session_state[k_auto] = sada
+    try:
+        provedba.predaj(sheet, pokusaj, definicija,
+                        odgovori_=st.session_state.get(
+                            _odgovori_kljuc({"dodjela_id": pokusaj.get("dodjela_id")})),
                         dopusti_ai=False)
-                    st.success(f"🧪 Pregled: {rjesavanje.rezultat_tekst(ocj['bodovi'], ocj['maks'])} "
-                               "— ništa nije spremljeno.")
+    except Exception as e:                              # noqa: BLE001 — već zaključen / mreža
+        if not any(k in str(e).lower() for k in ("zaklju", "predan")):
+            st.error(f"Automatska predaja nije uspjela: {e}")
+            st.caption("Odgovori su spremljeni do trenutka isteka — pokušat ću ponovno za koju "
+                       "sekundu. Ako se ponavlja, javi profesoru.")
+            return
+    # Stanje u Sheetu je mjerodavno: sljedeći prikaz pronađe predani pokušaj i pokaže završnicu.
+    st.session_state.pop(k_pok, None)
+    st.session_state.pop(k_gotov, None)
+    st.rerun()
+
+
+# ================================================================ završnica (2. korak)
+
+def prikazi_zavrsnicu(st, sheet, definicija: dict, dodjela: dict, *, pokusaj: dict | None = None,
+                      dry: bool = False) -> None:
+    """Nakon predaje: 2. korak — pošalji slike/PDF postupka ili potvrdi da ih nema.
+
+    Tek nakon toga piše „Test je završen" (Cakijev zahtjev 31.10.2026.). Učenik mora znati da
+    profesor **gleda postupak**, ne samo konačan odgovor, i da se slike (može ih biti više) i PDF
+    mogu pregledati.
+    """
+    did = model.tekst((dodjela or {}).get("dodjela_id"))
+    k_zav = _k("zavrsnica", did)
+    pokusaj = pokusaj or {}
+    ucenik_id = model.tekst(pokusaj.get("ucenik_id")) or model.tekst(dodjela.get("ucenik_id"))
+
+    if zavrsetak.predan_po_isteku(pokusaj):
+        st.warning(zavrsetak.tekst_isteka(auto=True))
+    else:
+        st.success("✅ **Tvoj test je predan.**")
+
+    # Rezultat — samo ako ga Student View dopušta (isto pravilo kao pregled rješenja).
+    try:
+        rok_prosao = dodjele.stanje_roka(dodjela, definicija) == "zatvoren"
+        vidi = rjesavanje.sto_vidi_ucenik(definicija.get("student_view_json"),
+                                          predano=True, rok_prosao=rok_prosao)
+    except Exception:                                   # noqa: BLE001 — prikaz ne smije puknuti
+        vidi = {}
+    maks = model.broj(pokusaj.get("bodovi_max"))
+    if maks and (vidi.get("bodovi") or vidi.get("rezultat")):
+        st.metric("Rezultat", rjesavanje.rezultat_tekst(pokusaj.get("bodovi"), maks))
+        st.caption("Ako neki zadatak još čeka provjeru profesora, rezultat je privremen.")
+    elif maks:
+        st.caption("Bodove ćeš vidjeti kad profesor pregleda test.")
+
+    st.divider()
+
+    stanje = st.session_state.get(k_zav)
+    if stanje:
+        st.success(zavrsetak.tekst_bez_postupka() if stanje == "nema" else zavrsetak.tekst_zavrseno())
+        with st.expander("➕ Poslati još slika postupka"):
+            _posalji_slike(st, sheet, definicija, dodjela, pokusaj, ucenik_id,
+                           dry=dry, kljuc=k_zav, dopusti_nema=False)
+        return
+
+    st.markdown("### 📷 Pošalji svoj postupak")
+    st.markdown(zavrsetak.tekst_koraka_2())
+    _posalji_slike(st, sheet, definicija, dodjela, pokusaj, ucenik_id,
+                   dry=dry, kljuc=k_zav, dopusti_nema=True)
+
+
+def _posalji_slike(st, sheet, definicija: dict, dodjela: dict, pokusaj: dict, ucenik_id: str,
+                   *, dry: bool, kljuc: str, dopusti_nema: bool = True) -> None:
+    """Upload slika/PDF postupka + rezervni put (poveznica) i gumb „NEMA POSTUPKA"."""
+    did = model.tekst((dodjela or {}).get("dodjela_id"))
+    datoteke = st.file_uploader(
+        "Slike postupka (može više) ili PDF", accept_multiple_files=True,
+        type=list(zavrsetak.DOPUSTENE_DATOTEKE), key=_k("upload", did))
+
+    b1, b2 = st.columns([3, 2])
+    posalji = b1.button("📤 POŠALJI SLIKE POSTUPKA", type="primary",
+                        use_container_width=True, disabled=not datoteke,
+                        key=_k("pos_slike", did))
+    nema = b2.button("NEMA POSTUPKA (nemam što poslati)", use_container_width=True,
+                     disabled=not dopusti_nema, key=_k("nema", did))
+
+    if posalji:
+        if dry:
+            st.info("Pregled: u pravom testu slike bi se spremile uz pokušaj i profesor bi ih vidio.")
+        else:
+            try:
+                rez = zavrsetak.posalji_postupak(
+                    sheet, pokusaj=pokusaj, ucenik_id=ucenik_id,
+                    datoteke=[{"naziv": getattr(d, "name", "postupak.jpg"),
+                               "bajtovi": d.getvalue()} for d in datoteke],
+                    folder=drive.folder_id(st.secrets))
+            except Exception as e:                      # noqa: BLE001 — slanje ne smije blokirati
+                st.error(f"Slanje nije uspjelo: {e}")
+            else:
+                for g in rez["greske"]:
+                    st.error(f"Nije poslano — {g}")
+                if rez["poslano"]:
+                    st.session_state[kljuc] = "poslano"
+                    st.rerun()
                 else:
-                    rez = provedba.predaj(sheet, pokusaj, definicija,
-                                          odgovori_=st.session_state[k_odg], dopusti_ai=False)
-                    st.success(f"✅ Predano: {rjesavanje.rezultat_tekst(rez['bodovi'], rez['maks'])}")
-                    if rez.get("ceka_profesora"):
-                        st.warning(rjesavanje.poruka_o_cekanju(rez["ceka_profesora"]))
-                    st.session_state.pop(k_pok, None)
-            except Exception as e:                      # noqa: BLE001
-                st.error(f"Predaja nije uspjela: {e}")
+                    st.caption("Možeš pokušati ponovno ili poslati **poveznicu** ispod.")
+    if nema:
+        st.session_state[kljuc] = "nema"
+        st.rerun()
+
+    with st.expander("📎 Ne mogu poslati datoteku — pošalji poveznicu"):
+        st.caption("Ako slikanje/upload ne radi, zalijepi poveznicu na fotografiju ili sken "
+                   "(Drive, mobitel, bilo gdje dostupno).")
+        veza = st.text_input("Poveznica", key=_k("veza", did))
+        if st.button("📎 Pošalji poveznicu", key=_k("pos_veza", did)):
+            if dry:
+                st.info("Pregled: poveznica bi se spremila uz pokušaj.")
+            else:
+                try:
+                    zavrsetak.posalji_poveznicu(sheet, pokusaj=pokusaj, ucenik_id=ucenik_id,
+                                                veza=veza)
+                except ValueError as e:
+                    st.error(str(e))
+                else:
+                    st.session_state[kljuc] = "poslano"
+                    st.rerun()
 
 
 def prikazi_pregled_rjesenja(st, zadaci: list[dict], odgovori: dict, *,

@@ -239,7 +239,8 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
 
 def prikazi_pregled_rjesenja(st, zadaci: list[dict], odgovori: dict, *,
                              pokazi_rjesenja: bool, pokazi_video: bool,
-                             pokazi_bodove: bool) -> None:
+                             pokazi_bodove: bool, sheet=None,
+                             pokusaj: dict | None = None, ucenik_id: str = "") -> None:
     """Nakon testa: što je učenik odgovorio, točan odgovor i 🎬 video — po Student View-u."""
     for i, z in enumerate(zadaci or []):
         red = rjesavanje.pregled_zadatka(
@@ -254,3 +255,26 @@ def prikazi_pregled_rjesenja(st, zadaci: list[dict], odgovori: dict, *,
                 st.success(f"Točno: {red['tocan_odgovor']}")
             if red["video"]:
                 st.markdown(f"🎬 **Video:** [{red['video']['naslov']}]({red['video']['url']})")
+            if sheet is not None and pokusaj:
+                try:
+                    import zalbe as _zalbe
+
+                    _zid = model.tekst(z.get("id"))
+                    _smije, _zasto = _zalbe.moze_podnijeti(sheet, pokusaj, _zid)
+                    if _smije:
+                        with st.form(f"zalba_{i}"):
+                            _razlog = st.text_area(
+                                "⚖️ Žalba na ocjenu ovog zadatka (objasni što smatraš pogrešnim)",
+                                height=80, key=f"zalba_tekst_{i}")
+                            if st.form_submit_button("Pošalji žalbu"):
+                                try:
+                                    _zalbe.podnesi(sheet, pokusaj=pokusaj, zadatak_id=_zid,
+                                                   razlog=_razlog, ucenik_id=ucenik_id)
+                                    st.success("Žalba je poslana profesoru.")
+                                except Exception as _e_z:      # noqa: BLE001
+                                    st.error(f"Žalba nije poslana: {_e_z}")
+                    elif model.tekst(_zasto):
+                        st.caption(f"⚖️ {_zasto}")
+                except Exception:                      # noqa: BLE001
+                    pass
+

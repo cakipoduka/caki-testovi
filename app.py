@@ -39,6 +39,7 @@ import ucenici
 import samoprovjera
 import tex_test
 import upute
+import zalbe
 import zakljucna
 from veza import sheet_baze, sheet_crm
 import predlosci
@@ -837,11 +838,8 @@ with tab_objavi:
                     format_func=lambda k: f"{model.tekst(_opcije_g[k].get('naziv')) or k} "
                                           f"({len(_opcije_g[k]['ucenici'])} uč.)",
                     key="v2_obj_grupe")
-                for _k in _odabrane_g:
-                    _cilj += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
-                               "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
-                              for u in (_opcije_g[_k].get("ucenici") or [])
-                              if model.tekst(u.get("ucenik_id"))]
+                _cilj = dodjele.sastavi_cilj(
+                    "grupa", grupe_odabrane=[_opcije_g[_k] for _k in _odabrane_g])
 
         elif _publika == "ucenici":
             _svi_u: dict[str, str] = {}
@@ -873,14 +871,20 @@ with tab_objavi:
                     "Učenici", sorted(_svi_u),
                     format_func=lambda k: f"{_svi_u.get(k) or '—'} ({k})",
                     key="v2_obj_ucenici")
-                _cilj += [{"ucenik_id": k, "ime_djeteta": _svi_u.get(k, "")} for k in _odabrani_u]
+                _cilj = dodjele.sastavi_cilj(
+                    "ucenici",
+                    ucenici_odabrani=[{"ucenik_id": k, "ime_djeteta": _svi_u.get(k, "")}
+                                      for k in _odabrani_u])
             else:
                 st.caption("Nema popisa učenika u CRM-u — upiši šifre ručno ispod.")
 
             _rucno = st.text_input("Ili šifre ručno (odvoji zarezom)", key="v2_obj_sifre",
                                    placeholder="AA1111, BB2222")
-            for _s in [x.strip().upper() for x in model.tekst(_rucno).split(",") if x.strip()]:
-                _cilj.append({"ucenik_id": _s, "ime_djeteta": ""})
+            _cilj = dodjele.sastavi_cilj(
+                "ucenici",
+                ucenici_odabrani=([{"ucenik_id": k, "ime_djeteta": _svi_u.get(k, "")}
+                                   for k in _odabrani_u] if _svi_u else []),
+                rucne_sifre=_rucno)
 
         elif _publika == "svi":
             _program = st.selectbox("Program", ["matura", "instrukcije", "upisi"],
@@ -908,14 +912,7 @@ with tab_objavi:
         if st.button("📤 Objavi", type="primary", key="v2_obj_gumb", disabled=not _moze):
             try:
                 if _publika == "svi":
-                    _cilj = []
-                    for _g in _grupe():
-                        if model.tekst(_g.get("program")).lower() != _program:
-                            continue
-                        _cilj += [{"ucenik_id": model.tekst(u.get("ucenik_id")).upper(),
-                                   "ime_djeteta": model.tekst(u.get("ime_djeteta"))}
-                                  for u in (_g.get("ucenici") or [])
-                                  if model.tekst(u.get("ucenik_id"))]
+                    _cilj = dodjele.ucenici_programa(_grupe(), _program)
                 _rez = dodjele.dodaj(_sheet(), _d, _cilj, dodijelio="caki")
                 if model.tekst(_d.get("status")) == "nacrt":
                     definicije.promijeni_status(_sheet(), _odabir_t, "objavljen", korisnik="caki")
@@ -931,6 +928,37 @@ with tab_objavi:
 
 with tab_rezultati:
     upute.prikazi(st, "rezultati")
+    # ŽALBE NA OCJENU (rok 5 dana) — ispravka ide u Izmjene_ocjena
+    with st.expander("Žalbe na ocjenu"):
+        try:
+            _zal = zalbe.otvorene(_sheet())
+            if not _zal:
+                st.caption("Nema otvorenih žalbi.")
+            else:
+                st.caption(f"Otvorenih žalbi: {len(_zal)}")
+                for _z in _zal:
+                    _zid_z = model.tekst(_z.get("zalba_id"))
+                    st.markdown(f"**{_zid_z}** · pokusaj {model.tekst(_z.get('pokusaj_id'))}"
+                                f" · zadatak {model.tekst(_z.get('zadatak_id'))}")
+                    st.caption(f"Razlog: {model.tekst(_z.get('razlog')) or '—'} "
+                               f"(rok do {model.datum_hr(_z.get('rok_do')) or '—'})")
+                    _c1, _c2, _c3 = st.columns([2, 2, 2])
+                    _obraz = _c1.text_input("Obrazloženje", key=f"v2_zal_o_{_zid_z}")
+                    if _c2.button("✅ Prihvati i ispravi", key=f"v2_zal_ok_{_zid_z}"):
+                        if zalbe.prihvati_i_ispravi(_sheet(), _zid_z, tocno=True,
+                                                    obrazlozenje=_obraz, profesor="caki"):
+                            st.success("Žalba prihvaćena, ocjena ispravljena (s tragom).")
+                            _osvjezi()
+                        else:
+                            st.error("Ispravka nije uspjela — postoji li ocjena tog zadatka?")
+                    if _c3.button("❌ Odbij", key=f"v2_zal_no_{_zid_z}"):
+                        zalbe.odgovori(_sheet(), _zid_z, prihvati=False,
+                                       odgovor=_obraz, tko="caki")
+                        st.info("Žalba odbijena.")
+                        _osvjezi()
+        except Exception as _e_zal:                     # noqa: BLE001
+            st.caption(f"Žalbe trenutno nisu dostupne: {_e_zal}")
+
     testovi = _testovi()
     if not testovi:
         st.info("Ova kartica se puni kad postoji barem jedan test.")
@@ -1125,7 +1153,8 @@ with tab_rezultati:
                     odg = provedba.odgovori(p)
                     ekran_ucenika.prikazi_pregled_rjesenja(
                         st, zadaci_r, odg,
-                        pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True)
+                        pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True,
+                        sheet=_sheet(), pokusaj=_pok, ucenik_id=model.tekst(_pok.get("ucenik_id")))
 
 
 with tab_kvaliteta:

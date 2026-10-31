@@ -23,6 +23,7 @@ import dodjele
 import ekran_ucenika
 import drive
 import model
+import veza
 import posjete
 import provedba
 import radovi
@@ -69,7 +70,9 @@ def _pregled_rjesenja(sheet, dodjela: dict, definicija: dict, pokusaj: dict) -> 
         return
     ekran_ucenika.prikazi_pregled_rjesenja(
         st, definicije.zadaci(definicija), provedba.odgovori(pokusaj),
-        pokazi_rjesenja=True, pokazi_video=smije_video, pokazi_bodove=smije_bodove)
+        pokazi_rjesenja=True, pokazi_video=smije_video, pokazi_bodove=smije_bodove,
+        sheet=veza.sheet_crm(), pokusaj=pokusaj,
+        ucenik_id=model.tekst(dodjela.get("ucenik_id")))
 
 
 def _kartica(dodjela: dict, definicija: dict, pokusaj) -> None:

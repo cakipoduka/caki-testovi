@@ -20,6 +20,7 @@ TAB_POKUSAJI = "Pokusaji"
 TAB_OCJENE = "Ocjene_zadataka"
 TAB_STATISTIKA = "Statistika_zadataka"
 TAB_IZMJENE_OCJENA = "Izmjene_ocjena"
+TAB_ZALBE = "Zalbe"
 TAB_DNEVNIK = "Dnevnik_radnji"
 TAB_RADOVI = "Radovi"
 TAB_POSJETE = "Posjete"
@@ -45,6 +46,8 @@ def _provjeri_pisanje() -> None:
 
 
 ZAGLAVLJA = {
+    "Zalbe": ["zalba_id", "pokusaj_id", "zadatak_id", "ucenik_id", "podnesena",
+              "razlog", "status", "odgovor", "tko_odgovorio", "odgovoreno", "rok_do"],
     "Izmjene_ocjena": ["izmjena_id", "pokusaj_id", "zadatak_id", "ocjena_prije",
                        "ocjena_poslije", "bodovi_prije", "bodovi_poslije", "izvor_prije",
                        "razlog", "povod", "tko", "kada"],

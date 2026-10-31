@@ -184,3 +184,64 @@ def datumi_za_dodjelu(dodjela: dict, definicija: dict) -> dict:
     return {**r, "trajanje_min": trajanje,
             "duljina": model.minuta_tekst(trajanje),
             "zadnji_dan": r["do"] + timedelta(days=0)}
+
+# ------------------------------------------------------------------ ciljna publika (iz app.py)
+
+def _normal_ucenik(uid: str, ime: str = "") -> dict:
+    return {"ucenik_id": model.tekst(uid).upper(), "ime_djeteta": model.tekst(ime)}
+
+
+def ucenici_programa(grupe_: list[dict], program: str) -> list[dict]:
+    """Svi učenici grupa čiji je `program` jednak traženom (matura / instrukcije / upisi)."""
+    cilj_program = model.tekst(program).lower()
+    izlaz, videno = [], set()
+    for g in grupe_ or []:
+        if model.tekst(g.get("program")).lower() != cilj_program:
+            continue
+        for u in (g.get("ucenici") or []):
+            uid = model.tekst(u.get("ucenik_id")).upper()
+            if not uid or uid in videno:
+                continue
+            videno.add(uid)
+            izlaz.append(_normal_ucenik(uid, u.get("ime_djeteta")))
+    return izlaz
+
+
+def sastavi_cilj(publika: str, *, grupe_odabrane=None, ucenici_odabrani=None,
+                 rucne_sifre: str = "", grupe_sve=None, program: str = "") -> list[dict]:
+    """Složi popis učenika za dodjelu iz odabrane publike.
+
+    `publika`: `grupa` | `ucenici` | `svi` | `nacrt` (vraća prazno — nacrt se ne objavljuje).
+    Duplikati se uklanjaju (učenik može biti u dvije kante ili i u popisu i u šiframa).
+    """
+    publika = model.tekst(publika).lower()
+    izlaz: list[dict] = []
+    videno: set[str] = set()
+
+    def _dodaj(uid, ime=""):
+        uid = model.tekst(uid).upper()
+        if not uid or uid in videno:
+            return
+        videno.add(uid)
+        izlaz.append(_normal_ucenik(uid, ime))
+
+    if publika == "grupa":
+        for g in (grupe_odabrane or []):
+            for u in (g.get("ucenici") or []):
+                _dodaj(u.get("ucenik_id"), u.get("ime_djeteta"))
+
+    elif publika == "ucenici":
+        for u in (ucenici_odabrani or []):
+            if isinstance(u, dict):
+                _dodaj(u.get("ucenik_id"), u.get("ime_djeteta") or u.get("ime"))
+            else:
+                _dodaj(u)
+        for sifra in [x.strip() for x in model.tekst(rucne_sifre).split(",") if x.strip()]:
+            _dodaj(sifra)
+
+    elif publika == "svi":
+        for u in ucenici_programa(grupe_sve or [], program):
+            _dodaj(u.get("ucenik_id"), u.get("ime_djeteta"))
+
+    return izlaz
+

@@ -437,3 +437,53 @@ def rekonstruiraj_dodjele(sheet, definicija_id: str) -> dict:
         tablice.dodaj(sheet, tablice.TAB_DODJELE, nove)
         izlaz["napravljeno"] = len(nove)
     return izlaz
+
+def dopuni_ocjene(sheet, definicija_id: str) -> dict:
+    """Iz v1 `detalji_json` napravi `Ocjene_zadataka` za pokušaje koji ih nemaju.
+
+    Claude (01.11.2026.): `detalji_json` je popunjen i sadrži
+    `{"id", "tocno", "status", "bodovi", "max", "odgovor", "ocekivano", "izvor", "zasto"}`.
+    Time „Uspjeh po zadatku" i „Uspjeh po cjelinama" rade i za uvezene testove.
+    """
+    import json
+
+    did = model.tekst(definicija_id)
+    izlaz = {"pokusaja": 0, "ocjena": 0, "bez_detalja": 0, "greske": []}
+    pokusaji = [p for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
+                if model.tekst(p.get("definicija_id")) == did]
+    postojeci = {model.tekst(r.get("pokusaj_id")) for r in
+                 tablice.ucitaj(sheet, tablice.TAB_OCJENE)}
+
+    novi = []
+    for p in pokusaji:
+        pid = model.tekst(p.get("pokusaj_id"))
+        if pid in postojeci:
+            continue
+        izlaz["pokusaja"] += 1
+        try:
+            detalji = json.loads(model.tekst(p.get("detalji_json")) or "[]")
+        except Exception:                               # noqa: BLE001
+            detalji = []
+        if not detalji:
+            izlaz["bez_detalja"] += 1
+            continue
+        for i, d in enumerate(detalji):
+            if not isinstance(d, dict):
+                continue
+            tocno = d.get("tocno")
+            novi.append({
+                "pokusaj_id": pid,
+                "zadatak_id": model.tekst(d.get("id")),
+                "redni_broj": i + 1,
+                "odgovor": model.tekst(d.get("odgovor")),
+                "tocno": "Da" if tocno is True or model.tekst(d.get("status")) == "tocno" else "Ne",
+                "bodovi": model.broj(d.get("bodovi"), 0),
+                "max": model.broj(d.get("max"), 1),
+                "izvor_ocjene": model.tekst(d.get("izvor")) or "string",
+                "vrijeme_s": "",
+                "komentar": model.tekst(d.get("zasto")),
+            })
+    if novi:
+        tablice.dodaj(sheet, tablice.TAB_OCJENE, novi)
+        izlaz["ocjena"] = len(novi)
+    return izlaz

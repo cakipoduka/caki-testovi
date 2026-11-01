@@ -1578,6 +1578,17 @@ with tab_postavke:
                         hide_index=True, width="stretch")
                 for _pu in _nacrt.get("upozorenja") or []:
                     st.warning(_pu)
+                if st.button("🧮 Dopuni ocjene po zadatku (iz v1 detalji_json)",
+                             key="v2_uvoz_ocjene"):
+                    try:
+                        _do = uvoz_v1.dopuni_ocjene(_sheet(), _nacrt.get("definicija_id"))
+                        st.success(f"Pokušaja: **{_do['pokusaja']}**, ocjena upisano "
+                                   f"**{_do['ocjena']}**, bez detalja **{_do['bez_detalja']}**.")
+                        if _do["ocjena"]:
+                            _osvjezi()
+                    except Exception as _e_do:          # noqa: BLE001
+                        st.error(f"Dopuna ocjena nije uspjela: {_e_do}")
+
                 if st.button("🛠 Rekonstruiraj dodjele iz pokušaja",
                              key="v2_uvoz_rekonstr"):
                     try:

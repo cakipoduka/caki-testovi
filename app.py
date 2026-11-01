@@ -48,8 +48,10 @@ import predlosci
 import pdf_izvjestaj
 import radovi
 import uvoz_v1
+import caki_stil as stil  # 31.10.2026.: CAKI tema
 
 st.set_page_config(page_title="CAKI — Testovi v2", page_icon="🧪", layout="wide")
+stil.primijeni()  # 31.10.2026.: CAKI tema
 
 
 # ------------------------------------------------------------------ prijava

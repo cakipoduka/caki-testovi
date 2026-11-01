@@ -102,6 +102,58 @@ def _v1_zadaci_json_za_test(sheet, test_id: str) -> str:
 
 # ================================================================ pretvorbe
 
+def _zadaci_iz_detalja(rezultati: list[dict], *, max_zadataka: int = 80) -> list[dict]:
+    """Rekonstruiraj popis zadataka iz `detalji_json` (v1) — kad `zadaci_json` nije čitljiv.
+
+    Uzima najpotpuniji rezultat (najviše detalja) i gradi v2 oblik zadatka:
+    `{id, tekst, opcije, odgovor, bodovi, tip}`. Tekst pokušava dohvatiti iz baze.
+    """
+    import json
+
+    najbolji = []
+    for r in rezultati or []:
+        try:
+            d = json.loads(model.tekst(r.get("detalji_json")) or "[]")
+        except Exception:                               # noqa: BLE001
+            d = []
+        if isinstance(d, list) and len(d) > len(najbolji):
+            najbolji = d
+    if not najbolji:
+        return []
+
+    iz_baze = {}
+    try:
+        import banka
+        import veza
+
+        sheet_baze = veza.sheet_baze()
+        for d in najbolji[:max_zadataka]:
+            zid = model.tekst(d.get("id"))
+            if zid:
+                z = banka.zadatak_iz_retka(banka.po_id(sheet_baze, zid) or {})
+                if z:
+                    iz_baze[zid] = z
+    except Exception:                                   # noqa: BLE001
+        iz_baze = {}
+
+    izlaz = []
+    for d in najbolji[:max_zadataka]:
+        zid = model.tekst(d.get("id"))
+        if not zid:
+            continue
+        baza = iz_baze.get(zid) or {}
+        izlaz.append({
+            "id": zid,
+            "tekst": model.tekst(baza.get("tekst")) or f"Zadatak {zid}",
+            "opcije": baza.get("opcije") or [],
+            "odgovor": model.tekst(d.get("ocekivano")) or model.tekst(baza.get("odgovor")),
+            "bodovi": model.broj(d.get("max"), model.broj(baza.get("bodovi"), 1)) or 1,
+            "tip": model.tekst(baza.get("tip")) or "kratki_odgovor",
+            "slika": model.tekst(baza.get("slika")),
+        })
+    return izlaz
+
+
 def zadaci_iz_v1(zadaci_json) -> list[dict]:
     """v1 zamrznuti zadatak → v2 oblik (doda polja koja v2 čita, ništa ne mijenja)."""
     izlaz = []
@@ -236,7 +288,15 @@ def pripremi(sheet, naziv: str) -> dict:
             "NJEGOVOG retka, pa pregled odgovara onome što je stvarno rješavao.")
     zadaci = next((z for z in zadaci_po_testu.values() if z), [])
     if not zadaci:
-        raise ValueError(f"Test „{naziv}” u v1 nema čitljive zadatke (`zadaci_json`) — "
+        # v1 nema `zadaci_json`, ali `detalji_json` po učenicima IMA id/max/ocekivano
+        zadaci = _zadaci_iz_detalja(rezultati)
+        if zadaci:
+            upozorenja.append(
+                f"v1 nije imao čitljive `zadaci_json`; popis od **{len(zadaci)} zadataka** "
+                "rekonstruiran je iz `detalji_json` (bodovi i točni odgovori). Tekst zadatka "
+                "dohvaćen je iz baze kad je bio dostupan.")
+    if not zadaci:
+        raise ValueError(f"Test „{naziv}” u v1 nema ni `zadaci_json` ni `detalji_json` — "
                          "uvoz nije moguć.")
 
     veca = _postojeci_uvoz(sheet, naziv)

@@ -356,3 +356,84 @@ def izvrsi(sheet, nacrt: dict) -> dict:
     except Exception:                                   # noqa: BLE001 — dnevnik ne blokira uvoz
         pass
     return napisano
+
+def dijagnostika(sheet, definicija_id: str) -> dict:
+    """Točni brojevi zapisa za jedan test po svim relevantnim tabovima (za rješavanje zastoja)."""
+    did = model.tekst(definicija_id)
+    izlaz = {"definicija_id": did,
+             "dodjele_ispita": 0, "pokusaji": 0, "ocjene": 0,
+             "crm_dodjele_rezultati": 0, "crm_dodjele_nasi": 0}
+    try:
+        izlaz["dodjele_ispita"] = len([
+            r for r in tablice.ucitaj(sheet, tablice.TAB_DODJELE)
+            if model.tekst(r.get("definicija_id")) == did])
+    except Exception:                                   # noqa: BLE001
+        pass
+    try:
+        pok = [r for r in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
+               if model.tekst(r.get("definicija_id")) == did]
+        izlaz["pokusaji"] = len(pok)
+        pids = {model.tekst(p.get("pokusaj_id")) for p in pok}
+        izlaz["ocjene"] = len([r for r in tablice.ucitaj(sheet, tablice.TAB_OCJENE)
+                               if model.tekst(r.get("pokusaj_id")) in pids])
+    except Exception:                                   # noqa: BLE001
+        pass
+    try:
+        for r in tablice.ucitaj(sheet, tablice.TAB_DODJELE_CRM):
+            if model.tekst(r.get("definicija_id")) == did:
+                izlaz["crm_dodjele_rezultati"] += 1
+            elif model.tekst(r.get("dodjela_id")).upper().startswith("D2"):
+                izlaz["crm_dodjele_nasi"] += 1
+    except Exception:                                   # noqa: BLE001
+        pass
+    return izlaz
+
+def rekonstruiraj_dodjele(sheet, definicija_id: str) -> dict:
+    """Napravi dodjele za pokušaje koji ih nemaju (ili im `dodjela_id` ne postoji u tabu).
+
+    Ne dira postojeće dodjele; ne dira v1. Vraća {"nedostaje", "napravljeno", "postojece"}.
+    """
+    did = model.tekst(definicija_id)
+    izlaz = {"nedostaje": 0, "napravljeno": 0, "postojece": 0}
+    if not did:
+        return izlaz
+
+    dodjele = tablice.ucitaj(sheet, tablice.TAB_DODJELE)
+    po_id = {model.tekst(d.get("dodjela_id")) for d in dodjele}
+    pokusaji = [p for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
+                if model.tekst(p.get("definicija_id")) == did]
+
+    novi_idovi = tablice.svi_idovi(sheet, tablice.TAB_DODJELE, "dodjela_id")
+    nove = []
+    for p in pokusaji:
+        did_p = model.tekst(p.get("dodjela_id"))
+        if did_p and did_p in po_id:
+            izlaz["postojece"] += 1
+            continue
+        izlaz["nedostaje"] += 1
+        novi = tablice.novi_id(novi_idovi, "D26-")
+        novi_idovi.append(novi)
+        nove.append({
+            "dodjela_id": novi,
+            "definicija_id": did,
+            "ucenik_id": model.tekst(p.get("ucenik_id")).upper(),
+            "ime_djeteta": "",
+            "grupa": "v1",
+            "rok_od": model.tekst(p.get("pocetak"))[:10],
+            "rok_do": model.tekst(p.get("predaja"))[:10],
+            "varijanta_seed": model.tekst(p.get("ucenik_id")).upper(),
+            "status": "predano",
+            "dodijelio": "rekonstrukcija",
+            "dodijeljeno": model.sada_iso(),
+        })
+        # poveži pokušaj na novu dodjelu
+        try:
+            tablice.azuriraj(sheet, tablice.TAB_POKUSAJI, "pokusaj_id",
+                             model.tekst(p.get("pokusaj_id")), {"dodjela_id": novi})
+        except Exception:                               # noqa: BLE001
+            pass
+
+    if nove:
+        tablice.dodaj(sheet, tablice.TAB_DODJELE, nove)
+        izlaz["napravljeno"] = len(nove)
+    return izlaz

@@ -1578,6 +1578,29 @@ with tab_postavke:
                         hide_index=True, width="stretch")
                 for _pu in _nacrt.get("upozorenja") or []:
                     st.warning(_pu)
+                if st.button("🛠 Rekonstruiraj dodjele iz pokušaja",
+                             key="v2_uvoz_rekonstr"):
+                    try:
+                        _rk = uvoz_v1.rekonstruiraj_dodjele(
+                            _sheet(), _nacrt.get("definicija_id"))
+                        st.success(f"Dodjele: postojeće **{_rk['postojece']}**, "
+                                   f"nedostajalo **{_rk['nedostaje']}**, "
+                                   f"napravljeno **{_rk['napravljeno']}**.")
+                        _osvjezi() if _rk["napravljeno"] else None
+                    except Exception as _e_rk:          # noqa: BLE001
+                        st.error(f"Rekonstrukcija nije uspjela: {_e_rk}")
+
+                if st.button("🔎 Dijagnostika uvoza (brojevi po tabovima)",
+                             key="v2_uvoz_dijag"):
+                    try:
+                        _dg = uvoz_v1.dijagnostika(_sheet(), _nacrt.get("definicija_id"))
+                        st.write(_dg)
+                        st.caption("Ako je `crm_dodjele_nasi` > 0 → zapisi su u CRM tabu `Dodjele` "
+                                   "(pokreni migraciju). Ako je `pokusaji` > 0 a "
+                                   "`dodjele_ispita` = 0 → dodjele nisu zapisane.")
+                    except Exception as _e_dg:          # noqa: BLE001
+                        st.error(f"Dijagnostika nije uspjela: {_e_dg}")
+
                 if _nacrt["dodjele"]:
                     # JEDNA forma: potvrda + uvoz u istom kliku (prije se stranica resetirala
                     # između kvačice i gumba — Caki nije stigao pritisnuti „Uvezi").

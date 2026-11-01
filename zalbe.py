@@ -160,7 +160,7 @@ def prihvati_i_ispravi(sheet, zalba_id: str, *, tocno: bool, bodovi=None,
     ok = provedba.ocijeni_rucno(
         sheet, model.tekst(zalba.get("pokusaj_id")), model.tekst(zalba.get("zadatak_id")),
         tocno=tocno, bodovi=bodovi, komentar=obrazlozenje or "žalba prihvaćena",
-        profesor=profesor or "caki")
+        profesor=profesor or "caki", povod="zalba")
     if ok:
         odgovori(sheet, zid, prihvati=True, odgovor=obrazlozenje, tko=profesor or "caki")
     return ok

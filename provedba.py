@@ -349,23 +349,49 @@ def _upisi_ocjene(sheet, pokusaj: dict, ocjena: dict) -> int:
     return tablice.dodaj(sheet, tablice.TAB_OCJENE, redci)
 
 
-def ocijeni_rucno(sheet, pokusaj_id: str, zadatak_id: str, *, tocno: bool, bodovi=None,
-                  komentar: str = "", profesor: str = "") -> bool:
-    """Profesor ispravlja ocjenu (obavezno kad je `izvor_ocjene` = „?")."""
-    from tablice import TAB_OCJENE
+def _preracunaj_pokusaj(sheet, pokusaj_id: str) -> bool:
+    """Zbroji `Ocjene_zadataka` i upiši ukupne bodove u `Pokusaji` (G5).
 
-    for r in tablice.ucitaj(sheet, TAB_OCJENE):
+    Prije: ručna ispravka zadatka nije mijenjala ukupe bodove → učenik je vidio stari rezultat.
+    """
+    pid = model.tekst(pokusaj_id)
+    if not pid:
+        return False
+    try:
+        redci = [r for r in tablice.ucitaj(sheet, tablice.TAB_OCJENE)
+                 if model.tekst(r.get("pokusaj_id")) == pid]
+    except Exception:                                   # noqa: BLE001
+        return False
+    if not redci:
+        return False
+    bodovi = sum(model.broj(r.get("bodovi"), 0) for r in redci)
+    maks = sum(model.broj(r.get("max"), 0) for r in redci)
+    return bool(tablice.azuriraj(sheet, tablice.TAB_POKUSAJI, "pokusaj_id", pid,
+                                 {"bodovi": bodovi, "bodovi_max": maks}))
+
+
+def ocijeni_rucno(sheet, pokusaj_id: str, zadatak_id: str, *, tocno: bool, bodovi=None,
+                  komentar: str = "", profesor: str = "",
+                  povod: str = "profesor_sam_primijetio") -> bool:
+    """Profesor ispravlja ocjenu jednog zadatka.
+
+    **G5 (01.11.2026.):** nakon upisa preračunavaju se **ukupni bodovi pokušaja**; uklonjen je
+    mrtvi `placeholder` poziv koji je pisao prazan rječnik.
+    `povod` ide u `Izmjene_ocjena` (`zalba` kad ispravak dolazi iz žalbe).
+    """
+    for r in tablice.ucitaj(sheet, tablice.TAB_OCJENE):
         if (model.tekst(r.get("pokusaj_id")) == model.tekst(pokusaj_id)
                 and model.tekst(r.get("zadatak_id")) == model.tekst(zadatak_id)):
-            iznos = bodovi if bodovi is not None else (r.get("max") if tocno else 0)
-            ok = tablice.azuriraj(sheet, TAB_OCJENE, "pokusaj_id", pokusaj_id, {})  # placeholder
-            # stvarni upis ide po kombinaciji pokušaj+zadatak → radimo izravno preko retka
-            return _upisi_rucno(sheet, r, tocno, iznos, komentar, profesor)
+            iznos = bodovi if bodovi is not None else (model.broj(r.get("max"), 0) if tocno else 0)
+            ok = _upisi_rucno(sheet, r, tocno, iznos, komentar, profesor, povod=povod)
+            if ok:
+                _preracunaj_pokusaj(sheet, pokusaj_id)
+            return ok
     return False
 
 
 def _kao_bool(vrijednost):
-    """„Da"/„da"/True/„1" → True; sve ostalo (uključujući prazno) → None."""
+    """„Da"/„da"/True → True; „Ne"/0/False → False; prazno/ostalo → None."""
     tekst = model.tekst(vrijednost).lower()
     if tekst in ("da", "1", "true", "točno", "tocno"):
         return True
@@ -374,7 +400,8 @@ def _kao_bool(vrijednost):
     return None
 
 
-def _upisi_rucno(sheet, redak: dict, tocno: bool, bodovi, komentar: str, profesor: str) -> bool:
+def _upisi_rucno(sheet, redak: dict, tocno: bool, bodovi, komentar: str, profesor: str,
+                 povod: str = "profesor_sam_primijetio") -> bool:
     """Pomoćna: upiše ručnu ocjenu u točan redak `Ocjene_zadataka`."""
     ws = tablice.osiguraj(sheet, tablice.TAB_OCJENE)
     zaglavlje = [model.tekst(h) for h in (ws.row_values(1) or [])]
@@ -400,7 +427,7 @@ def _upisi_rucno(sheet, redak: dict, tocno: bool, bodovi, komentar: str, profeso
                     bodovi_poslije=bodovi,
                     izvor_prije=model.tekst(redak.get("izvor_ocjene")),
                     razlog=komentar,
-                    povod=_izmj.POVOD_PROFESOR,
+                    povod=povod,
                     tko=profesor,
                 )
             except Exception:                          # noqa: BLE001 — trag ne smije blokirati ocjenu

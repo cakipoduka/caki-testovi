@@ -1,0 +1,21 @@
+# ============================================================================
+# CAKI tema — kopirati kao:  caki-testovi/.streamlit/config.toml
+# OVO JE NOVA DATOTEKA — taj repo je do sada NIJE imao (nije bilo nikakve teme).
+# ============================================================================
+# Mijenja SAMO izgled. Ne dira podatke ni logiku.
+# Povratak na staro: obriši datoteku .streamlit/config.toml.
+
+[theme]
+primaryColor = "#227AFF"
+backgroundColor = "#F5F7FB"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#273044"
+font = "sans serif"
+
+# ⚠️ NEMA [client] SEKCIJE — NAMJERNO.
+# Ovaj repo ima pages/1_Ucenik.py, a do sada nije imao config.toml, pa je
+# Streamlitov izbornik stranica bio VIDLJIV. Ako se sada doda
+# showSidebarNavigation = false, stranica "Učenik" može postati nedostupna.
+# Zato: samo tema, ponašanje navigacije ostaje točno kako je bilo.
+# (Ako se jednog dana potvrdi da se do nje dolazi isključivo st.switch_page
+#  gumbom, tada se [client] sekcija može dodati — ali to je zasebna odluka.)

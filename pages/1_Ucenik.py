@@ -29,8 +29,10 @@ import provedba
 import radovi
 import zavrsetak
 from veza import sheet_crm
+import caki_stil as stil          # 31.10.2026.: CAKI tema
 
 st.set_page_config(page_title="CAKI — Testovi", page_icon="📝", layout="centered")
+stil.primijeni()                  # 31.10.2026.: CAKI tema
 
 
 @st.cache_resource(show_spinner=False)

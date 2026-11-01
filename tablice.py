@@ -158,6 +158,24 @@ def _postojeci_tab(sheet, tab: str):
     return None
 
 
+def _tab_po_indeksu(sheet, tab: str):
+    """Nađi tab prolaskom po INDEKSU (0..60) i usporedbom naslova — najrobusnija varijanta."""
+    cilj = _normal_ime(tab)
+    for i in range(0, 60):
+        try:
+            ws = sheet.get_worksheet(i)
+        except Exception:                               # noqa: BLE001
+            break
+        if ws is None:
+            break
+        try:
+            if _normal_ime(getattr(ws, "title", "")) == cilj:
+                return ws
+        except Exception:                               # noqa: BLE001
+            continue
+    return None
+
+
 def _tab_postoji(sheet, tab: str) -> bool:
     """Provjeri postojanje taba **izravnim čitanjem ćelije** (ne ovisi o popisu tabova)."""
     try:
@@ -260,6 +278,11 @@ def osiguraj(sheet, tab: str):
         except Exception:                               # noqa: BLE001
             pass
 
+    # 3b) tab postoji, ali ime se ne podudara — probaj po indeksu
+    po_indeksu = _tab_po_indeksu(sheet, tab)
+    if po_indeksu is not None:
+        return po_indeksu
+
     # 4) napravi novi
     try:
         return sheet.add_worksheet(title=tab, rows=1000, cols=max(len(zaglavlje), 5))
@@ -279,6 +302,9 @@ def osiguraj(sheet, tab: str):
                     return sheet.worksheet(tab)
                 except Exception:                       # noqa: BLE001
                     pass
+            po_indeksu = _tab_po_indeksu(sheet, tab)
+            if po_indeksu is not None:
+                return po_indeksu
             svjez = svjez_sheet(sheet)
             if svjez is not None:
                 try:

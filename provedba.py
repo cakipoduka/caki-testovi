@@ -286,9 +286,14 @@ def _zapisi_statistiku(sheet, pokusaj: dict, definicija: dict, zadaci: list[dict
 
 
 def predaj(sheet, pokusaj: dict, definicija: dict, *, odgovori_=None, sada=None, pozovi=None,
-           dopusti_ai: bool = True) -> dict:
+           dopusti_ai: bool | None = None) -> dict:
     """Ocijeni i zaključi pokušaj. Vraća {"bodovi", "maks", "status", "ceka_profesora", "detalji"}."""
     sada = sada or model.sada()
+    if dopusti_ai is None:                              # 💡 AI pomoć je odluka PO TESTU
+        try:
+            dopusti_ai = bool(definicije.smije_ai(definicija))
+        except Exception:                               # noqa: BLE001
+            dopusti_ai = False
     if model.tekst(_svjez(sheet, pokusaj).get("status")) != STATUS_U_TIJEKU:
         raise ValueError("Ovaj pokušaj je već zaključen.")
 

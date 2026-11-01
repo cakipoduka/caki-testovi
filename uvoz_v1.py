@@ -498,6 +498,26 @@ def rekonstruiraj_dodjele(sheet, definicija_id: str) -> dict:
         izlaz["napravljeno"] = len(nove)
     return izlaz
 
+def _detalji_iz_v1(sheet, ucenik_id: str, test_id: str = "") -> list:
+    """`detalji_json` iz v1 `Rezultati_testova` za učenika (i test, ako je zadan)."""
+    import json
+
+    uid = model.tekst(ucenik_id).upper()
+    tid = model.tekst(test_id).upper()
+    for r in _v1_tablica(sheet, V1_REZ_TAB):
+        if model.tekst(r.get("ucenik_id")).upper() != uid:
+            continue
+        if tid and model.tekst(r.get("test_id")).upper() != tid:
+            continue
+        try:
+            d = json.loads(model.tekst(r.get("detalji_json")) or "[]")
+        except Exception:                               # noqa: BLE001
+            continue
+        if isinstance(d, list) and d:
+            return d
+    return []
+
+
 def dopuni_ocjene(sheet, definicija_id: str) -> dict:
     """Iz v1 `detalji_json` napravi `Ocjene_zadataka` za pokušaje koji ih nemaju.
 
@@ -524,6 +544,9 @@ def dopuni_ocjene(sheet, definicija_id: str) -> dict:
             detalji = json.loads(model.tekst(p.get("detalji_json")) or "[]")
         except Exception:                               # noqa: BLE001
             detalji = []
+        if not detalji:
+            # rezerva: v1 redak po (`test_id`, `ucenik_id`) — tamo je `detalji_json` pun
+            detalji = _detalji_iz_v1(sheet, model.tekst(p.get("ucenik_id")))
         if not detalji:
             izlaz["bez_detalja"] += 1
             continue

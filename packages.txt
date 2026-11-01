@@ -3,5 +3,3 @@ texlive-latex-recommended
 texlive-latex-extra
 texlive-pictures
 texlive-fonts-recommended
-antlr4-python3-runtime==4.11.1
-sympy==1.13.3

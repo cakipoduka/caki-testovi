@@ -366,6 +366,25 @@ def ocjeni_zadatke(zadaci: list[dict], odgovori, *, pozovi=None, dopusti_ai: boo
         if odg is None and isinstance(odgovori, dict):
             odg = (odgovori or {}).get(str(i))
         r = ocjeni_zadatak(z, odg, pozovi=pozovi, dopusti_ai=dopusti_ai)
+
+        # 🤖 AI kao TREĆI sloj: samo ako je ostalo „sumnja" i profesor je dopustio AI za OVAJ test
+        if (r.get("izvor") == "?" and dopusti_ai
+                and model.tekst(z.get("tip")) in ("kratki_odgovor", "brojcan", "popuni_praznine",
+                                                   "povezivanje", "otvoreni_odgovor")):
+            try:
+                _ai = ai_provjeri_izraz(
+                    z.get("odgovor") or z.get("konacan_odgovor"), odg,
+                    model.tekst(z.get("tekst")), pozovi=pozovi)
+            except Exception:                       # noqa: BLE001
+                _ai = None
+            if _ai is not None:
+                _maks = model.broj(z.get("bodovi"), r.get("max") or 1) or 1
+                r = {**r, "tocno": bool(_ai.get("tocno")),
+                     "bodovi": float(_maks) if _ai.get("tocno") else 0.0,
+                     "izvor": _ai.get("izvor") or IZVOR_AI,
+                     "sigurnost": _ai.get("sigurnost") or "srednja",
+                     "zasto": model.tekst(_ai.get("zasto")) or r.get("zasto", "")}
+
         ukupno += r["bodovi"]
         maks += r["max"]
         if r["izvor"] == "?":

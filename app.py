@@ -23,6 +23,7 @@ _KATEGORIJE_INFO = [
 
 import analitika
 import provedba
+import provjera_ocjena
 import posjete
 import podsjetnik
 import banka
@@ -1367,6 +1368,44 @@ with tab_rezultati:
                                    mime="text/csv", key="v2_matrica_csv")
         except Exception as _e_m:                       # noqa: BLE001
             st.caption(f"Matrica trenutno nije dostupna: {_e_m}")
+
+    # ---------------------------------------------------------------- 🧑‍🏫 PROVJERA (G4)
+    st.divider()
+    st.subheader("🧑‍🏫 Provjera — što čeka profesora")
+    try:
+        _grupe_cek = provjera_ocjena.grupirano(_sheet(), odabir_r)
+        if not _grupe_cek:
+            st.success("Nema zadataka koji čekaju provjeru — sve je odlučeno automatski.")
+        else:
+            _ukupno = sum(len(v) for v in _grupe_cek.values())
+            st.caption(f"**{_ukupno}** zadataka u **{len(_grupe_cek)}** skupina "
+                       "(isti odgovor = jedna odluka za sve).")
+            for _kljuc, _stavke in _grupe_cek.items():
+                _zad, _odg = (model.tekst(_kljuc).split(" :: ", 1) + [""])[:2]
+                with st.container(border=True):
+                    st.markdown(f"**Zadatak `{_zad}`** · odgovor: `{_odg or '—'}` · "
+                                f"{len(_stavke)} učenika · izvor: "
+                                f"{model.tekst(_stavke[0].get('izvor')) or '?'}")
+                    _cc1, _cc2 = st.columns([1, 3])
+                    _kom = _cc2.text_input("Komentar (vidi ga učenik)",
+                                           key=f"v2_pc_k_{abs(hash(_kljuc)) % 10**8}")
+                    _v = _cc1.radio("Ocjena", ["Točno", "Netočno"],
+                                    key=f"v2_pc_o_{abs(hash(_kljuc)) % 10**8}",
+                                    horizontal=True)
+                    if st.button("💾 Potvrdi za sve u skupini",
+                                 key=f"v2_pc_potvrdi_{abs(hash(_kljuc)) % 10**8}"):
+                        _ok_svi = 0
+                        for _st in _stavke:
+                            if provjera_ocjena.potvrdi(
+                                    _sheet(), _st["pokusaj_id"], _st["zadatak_id"],
+                                    tocno=(_v == "Točno"),
+                                    bodovi=_st.get("max") if _v == "Točno" else 0,
+                                    komentar=_kom, profesor="caki"):
+                                _ok_svi += 1
+                        st.success(f"Potvrđeno za **{_ok_svi}** učenika.")
+                        _osvjezi()
+    except Exception as _e_pc:                          # noqa: BLE001
+        st.caption(f"Provjera trenutno nije dostupna: {_e_pc}")
 
 with tab_kvaliteta:
     upute.prikazi(st, "kvaliteta")

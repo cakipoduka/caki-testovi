@@ -101,8 +101,10 @@ def ucitaj(sheet, tab: str) -> list[dict]:
     """Svi retci taba kao lista dictova. Nepostojeći tab = prazna lista (ne rušiti stranicu)."""
     try:
         ws = sheet.worksheet(tab)
-    except Exception:                                   # noqa: BLE001 — tab još ne postoji
-        return []
+    except Exception:                                   # noqa: BLE001
+        # rezerva: čitaj preko raspona (Worksheet nije dostupan)
+        redci = _citaj_rangom(sheet, tab)
+        return redci or []
     try:
         return [dict(r) for r in ws.get_all_records()]
     except Exception:                                   # noqa: BLE001 — prazna tablica bez zaglavlja
@@ -196,6 +198,57 @@ def _tab_po_indeksu(sheet, tab: str):
         except Exception:                               # noqa: BLE001
             continue
     return None
+
+
+def _ws_ili_none(sheet, tab: str):
+    """Worksheet ili `None` — **bez podizanja greške** (tada radimo preko raspona)."""
+    try:
+        return osiguraj(sheet, tab)
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
+def _rang(tab: str, a1: str = "A1") -> str:
+    """A1 raspon s imenom taba u navodnicima (radi i za imena s razmacima)."""
+    return "'" + _kao_tekst(tab).replace("'", "''") + "'!" + a1
+
+
+def _citaj_rangom(sheet, tab: str) -> list[dict]:
+    """Pročitaj cijeli tab preko raspona (bez Worksheet objekta)."""
+    try:
+        vrijednosti = sheet.values_get(_rang(tab, "A:ZZ")).get("values") or []
+    except Exception:                                   # noqa: BLE001
+        return []
+    if not vrijednosti:
+        return []
+    zaglavlje = [_kao_tekst(h) for h in vrijednosti[0]]
+    redci = []
+    for red in vrijednosti[1:]:
+        redci.append({zaglavlje[i]: (red[i] if i < len(red) else "")
+                      for i in range(len(zaglavlje)) if zaglavlje[i]})
+    return redci
+
+
+def _dodaj_rangom(sheet, tab: str, redci: list[dict], zaglavlje=None) -> int:
+    """Dodaj retke preko `values_append` (bez Worksheet objekta). Vraća broj dodanih."""
+    if not redci:
+        return 0
+    postojece = _citaj_rangom(sheet, tab)
+    kolone = ([_kao_tekst(h) for h in (zaglavlje or [])] or
+              ([_kao_tekst(k) for k in postojece[0]] if postojece else []) or
+              [_kao_tekst(k) for k in redci[0]])
+    if not kolone:
+        return 0
+    tijelo = [[r.get(k, "") for k in kolone] for r in redci]
+    try:
+        sheet.values_append(_rang(tab, "A1"), {"valueInputOption": "RAW"}, {"values": tijelo})
+    except Exception:                                   # noqa: BLE001 — probaj update
+        try:
+            sheet.values_update(_rang(tab, "A1"), {"valueInputOption": "RAW"},
+                                {"values": tijelo})
+        except Exception:                               # noqa: BLE001
+            return 0
+    return len(redci)
 
 
 def _tab_postoji(sheet, tab: str) -> bool:
@@ -389,7 +442,10 @@ def dodaj(sheet, tab: str, redci: list[dict]) -> int:
     _provjeri_pisanje()
     if not redci:
         return 0
-    ws = osiguraj(sheet, tab)
+    ws = _ws_ili_none(sheet, tab)
+    if ws is None:
+        # rezerva: piši preko raspona (Worksheet nije dostupan)
+        return _dodaj_rangom(sheet, tab, redci, ZAGLAVLJA.get(tab))
     zaglavlje = [_kao_tekst(h) for h in (ws.row_values(1) or [])] or ZAGLAVLJA[tab]
     ws.append_rows([[redci_r.get(h, "") for h in zaglavlje] for redci_r in redci],
                    value_input_option="RAW")

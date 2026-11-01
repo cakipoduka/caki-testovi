@@ -1374,6 +1374,34 @@ with tab_postavke:
         except Exception as _e_sp:                 # noqa: BLE001
             st.caption(f"Samoprovjera nije dostupna: {_e_sp}")
 
+    st.markdown("**📄 Sheet koji aplikacija vidi**")
+    try:
+        _dg = tablice.dijagnostika(_baza())
+        st.caption(f"Naslov: **{_dg['naslov'] or '—'}** · ID: `{_dg['id'] or '—'}` · "
+                   f"tabova: **{_dg['tabova']}**")
+        if _dg["naslovi"]:
+            st.caption("Tabovi: " + ", ".join(_dg["naslovi"]))
+        if _dg["greska"]:
+            st.warning(f"Popis tabova nije dostupan: {_dg['greska']}")
+    except Exception as _e_dg:                          # noqa: BLE001
+        st.caption(f"Dijagnostika nije dostupna: {_e_dg}")
+
+    st.markdown("**🚚 Migracija dodjela testova (jednom)**")
+    st.caption("CRM tab `Dodjele` koristi se za dodjele učenika profesoru. v2 od sada piše u "
+               "`Dodjele_ispita`. Ovdje se **kopiraju** samo v2 retci (`D26-…` / s `definicija_id`) "
+               "— ništa se ne briše.")
+    if st.button("🚚 Premjesti v2 dodjele u `Dodjele_ispita`", key="v2_migr_dodjele"):
+        try:
+            _rez = dodjele.premjesti_iz_crm_taba(_sheet())
+            if _rez.get("greska"):
+                st.error(f"Migracija nije uspjela: {_rez['greska']}")
+            else:
+                st.success(f"Nađeno **{_rez['nadeno']}**, premješteno "
+                           f"**{_rez['premjesteno']}**, već bilo {_rez['preskoceno']}.")
+                _osvjezi()
+        except Exception as _e_mig:                     # noqa: BLE001
+            st.error(f"Migracija nije uspjela: {_e_mig}")
+
     st.subheader("🩺 Provjera sustava")
     try:
         _u = _je_kopija(getattr(_baza(), "title", ""))

@@ -245,3 +245,43 @@ def sastavi_cilj(publika: str, *, grupe_odabrane=None, ucenici_odabrani=None,
 
     return izlaz
 
+# ------------------------------------------------------------------ migracija (01.11.2026.)
+
+def premjesti_iz_crm_taba(sheet) -> dict:
+    """Premjesti v2 retke iz CRM taba `Dodjele` u `Dodjele_ispita` (bez brisanja!).
+
+    Vraća {"nadeno", "premjesteno", "preskoceno", "greska"}.
+    Prepoznaje v2 retke po: `Dodjela_id` počinje s `D2` **ili** postoji `definicija_id`.
+    CRM retci (`DJ-…` s profesorom/predmetom) **ostaju netaknuti**.
+    """
+    izlaz = {"nadeno": 0, "premjesteno": 0, "preskoceno": 0, "greska": ""}
+    try:
+        redci = tablice.ucitaj(sheet, tablice.TAB_DODJELE_CRM)
+    except Exception as e:                              # noqa: BLE001
+        izlaz["greska"] = str(e)
+        return izlaz
+
+    nasa = []
+    for r in redci:
+        did = model.tekst(r.get("dodjela_id"))
+        if did.upper().startswith("D2") or model.tekst(r.get("definicija_id")):
+            nasa.append(r)
+    izlaz["nadeno"] = len(nasa)
+    if not nasa:
+        return izlaz
+
+    # već premješteno?
+    try:
+        postojece = {model.tekst(x.get("dodjela_id"))
+                     for x in tablice.ucitaj(sheet, tablice.TAB_DODJELE)}
+    except Exception:                                   # noqa: BLE001
+        postojece = set()
+
+    novi = [r for r in nasa if model.tekst(r.get("dodjela_id")) not in postojece]
+    izlaz["preskoceno"] = len(nasa) - len(novi)
+    if novi:
+        zaglavlje = tablice.ZAGLAVLJA[tablice.TAB_DODJELE]
+        tablice.dodaj(sheet, tablice.TAB_DODJELE,
+                      [{k: model.tekst(r.get(k)) for k in zaglavlje} for r in novi])
+        izlaz["premjesteno"] = len(novi)
+    return izlaz

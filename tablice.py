@@ -15,7 +15,8 @@ import threading
 # ------------------------------------------------------------------ tablice i zaglavlja
 
 TAB_DEFINICIJE = "Definicije_testova"
-TAB_DODJELE = "Dodjele"
+TAB_DODJELE = "Dodjele_ispita"          # v2: dodjele TESTOVA (CRM ima svoj `Dodjele`)
+TAB_DODJELE_CRM = "Dodjele"             # CRM: dodjele učenika profesoru — NE dirati
 TAB_POKUSAJI = "Pokusaji"
 TAB_OCJENE = "Ocjene_zadataka"
 TAB_STATISTIKA = "Statistika_zadataka"
@@ -57,6 +58,7 @@ ZAGLAVLJA = {
         "rok_od", "rok_do", "status", "student_view_json", "varijanta_pravilo",
         "pdf_verzija", "autor", "kreirano", "napomena", "ai_pomoc",
     ],
+    # v2: dodjele TESTOVA. CRM koristi `Dodjele` za nešto drugo — zato je ime različito.
     TAB_DODJELE: [
         "dodjela_id", "definicija_id", "ucenik_id", "ime_djeteta", "grupa",
         "rok_od", "rok_do", "varijanta_seed", "status", "dodijelio", "dodijeljeno",
@@ -156,37 +158,143 @@ def _postojeci_tab(sheet, tab: str):
     return None
 
 
-def osiguraj(sheet, tab: str):
-    """Vrati worksheet; ako taba nema, napravi ga sa zadanim zaglavljem (samo uz dozvoljeno pisanje).
+def _tab_postoji(sheet, tab: str) -> bool:
+    """Provjeri postojanje taba **izravnim čitanjem ćelije** (ne ovisi o popisu tabova)."""
+    try:
+        sheet.values_get(f"'{tab}'!A1")
+        return True
+    except Exception:                                   # noqa: BLE001
+        return False
 
-    VAŽNO (29.10.2026.): tab se prvo traži **tolerantno**. Ako Google ipak odbije `addSheet`
-    („A sheet with the name … already exists"), vraća se postojeći tab — objava ne smije pasti
-    zbog toga.
+
+def _osvjezi_metapodatke(sheet) -> None:
+    """Osvježi predmemoriju tabova na `Spreadsheet` objektu (gspread je drži u memoriji)."""
+    try:
+        sheet.fetch_sheet_metadata()
+    except Exception:                                   # noqa: BLE001
+        pass
+
+
+def dijagnostika(sheet) -> dict:
+    """Što aplikacija STVARNO vidi: naslov, ID, broj tabova i prvih 10 naslova.
+
+    Služi za ⚙️ Postavke → Provjera baze: razlikuje „pogrešan Sheet" od „nema prava".
+    """
+    info = {"naslov": "", "id": "", "tabova": 0, "naslovi": [], "greska": ""}
+    try:
+        info["naslov"] = _kao_tekst(getattr(sheet, "title", ""))
+        info["id"] = _kao_tekst(getattr(sheet, "id", ""))
+    except Exception:                                   # noqa: BLE001
+        pass
+    naslovi = _naslovi_tabova(sheet)
+    info["naslovi"] = naslovi[:10]
+    info["tabova"] = len(naslovi)
+    if not naslovi:
+        try:
+            sheet.worksheets()
+        except Exception as e:                          # noqa: BLE001
+            info["greska"] = f"{type(e).__name__}: {e}"
+    return info
+
+
+def svjez_sheet(sheet):
+    """Novi objekt istog Sheet-a (bez predmemorije) — pomoć kad popis tabova ostane prazan."""
+    try:
+        import veza
+
+        klijent = veza.klijent()
+        return klijent.open_by_key(getattr(sheet, "id", "") or "")
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
+def provjeri_zaglavlje(sheet, tab: str, ocekivano=None) -> tuple[bool, str]:
+    """Vrati (odgovara, poruka). Štiti od pisanja u tab s drugim stupcima.
+
+    Zašto: CRM tab `Dodjele` ima sasvim druge stupce (profesor, predmet, datum) — pisanje v2 redaka
+    u njega pomiješalo je dvije vrste podataka (Caki, 01.11.2026.).
+    """
+    ocekivano = list(ocekivano or ZAGLAVLJA.get(tab) or [])
+    try:
+        ws = sheet.worksheet(tab)
+        stvarno = [k for k in (ws.row_values(1) or []) if _kao_tekst(k)]
+    except Exception:                                   # noqa: BLE001
+        return True, "tab ne postoji — može se napraviti"
+    if not stvarno:
+        return True, "tab je prazan — zaglavlje će se upisati"
+    if not ocekivano:
+        return True, "nema očekivanog zaglavlja"
+    if [s.lower() for s in stvarno] == [o.lower() for o in ocekivano]:
+        return True, "zaglavlje odgovara"
+    return False, (f"Tab `{tab}` ima DRUGE stupce ({', '.join(stvarno[:6])}…) — "
+                   f"očekivano: {', '.join(ocekivano[:6])}…")
+
+
+def osiguraj(sheet, tab: str):
+    """Vrati worksheet; ako taba nema, napravi ga (samo uz dozvoljeno pisanje).
+
+    Robustno na tri stvari koje su stvarno smetale (01.11.2026.):
+      · gspread predmemorija tabova („nijedan tab nije vidljiv"), 
+      · različit zapis imena (razmaci / velika slova / dijakritika),
+      · `addSheet` koji padne jer tab **postoji** — tada se NE ruši, nego se dohvati.
     """
     _provjeri_pisanje()
     zaglavlje = ZAGLAVLJA.get(tab) or ["id"]
 
+    # 1) izravno
     try:
         return sheet.worksheet(tab)
     except Exception:                                   # noqa: BLE001
         pass
 
+    # 2) tolerantno po popisu
     postoji = _postojeci_tab(sheet, tab)
     if postoji is not None:
         return postoji
 
+    # 3) tab postoji, ali ga popis ne vidi → osvježi metapodatke i probaj ponovno
+    if _tab_postoji(sheet, tab):
+        _osvjezi_metapodatke(sheet)
+        try:
+            return sheet.worksheet(tab)
+        except Exception:                               # noqa: BLE001
+            pass
+
+    # 4) napravi novi
     try:
         return sheet.add_worksheet(title=tab, rows=1000, cols=max(len(zaglavlje), 5))
     except Exception as e:                              # noqa: BLE001
-        # utrka: netko je u međuvremenu napravio tab — vrati ga umjesto pada
-        postoji = _postojeci_tab(sheet, tab)
-        if postoji is not None:
-            return postoji
+        poruka = str(e)
+        # 4a) Google kaže: tab već postoji → dohvati ga (nikad ne ruši objavu)
+        if "already exists" in poruka.lower():
+            _osvjezi_metapodatke(sheet)
+            for varijanta in (tab, tab.strip(), tab.capitalize(), tab.lower(), tab.upper()):
+                try:
+                    return sheet.worksheet(varijanta)
+                except Exception:                       # noqa: BLE001
+                    continue
+            if _tab_postoji(sheet, tab):
+                _osvjezi_metapodatke(sheet)
+                try:
+                    return sheet.worksheet(tab)
+                except Exception:                       # noqa: BLE001
+                    pass
+            svjez = svjez_sheet(sheet)
+            if svjez is not None:
+                try:
+                    return svjez.worksheet(tab)
+                except Exception:                       # noqa: BLE001
+                    pass
+            raise RuntimeError(
+                f"Tab `{tab}` postoji, ali ga aplikacija ne može otvoriti. "
+                "Najčešće: servisni račun nema pravo **Editor** na tom Sheetu (ili `CRM_SHEET_ID` "
+                "pokazuje na drugu datoteku). Dodijeli pristup i pokušaj ponovno."
+            ) from e
         vidljivi = ", ".join(_naslovi_tabova(sheet)[:25]) or "(nijedan tab nije vidljiv)"
         raise RuntimeError(
             f"Tab `{tab}` nije moguće naći ni napraviti ({e}). "
-            f"Tabovi koje aplikacija vidi u ovom Sheetu: {vidljivi}. "
-            "Ako `Dodjele` postoji, provjeri da je isti Spreadsheet ID u Secrets."
+            f"Tabovi koje aplikacija vidi: {vidljivi}. "
+            "Provjeri isti Spreadsheet ID i pravo Editor za servisni račun."
         ) from e
 
 

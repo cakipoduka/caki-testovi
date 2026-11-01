@@ -85,6 +85,12 @@ def _kao_broj(tekst):
 
 def tocan_string(kljuc, odgovor, tolerancija: float = 1e-9) -> bool:
     """Prvi sloj: je li odgovor jednak ključu nakon normalizacije (broj ili tekst)."""
+    try:
+        _rez = _provjera().uporedi(kljuc, odgovor)
+        if _rez.get("tocno") is not None:
+            return bool(_rez["tocno"])
+    except Exception:                       # noqa: BLE001
+        pass
     a, b = normalizuj(kljuc), normalizuj(odgovor)
     if not a or not b:
         return False
@@ -373,3 +379,115 @@ def ocjeni_zadatke(zadaci: list[dict], odgovori, *, pozovi=None, dopusti_ai: boo
 def postotak(bodovi, maks) -> int:
     m = model.broj(maks)
     return int(round(100 * model.broj(bodovi) / m)) if m else 0
+
+# ------------------------------------------------------------------ G1: slojevi provjere izraza
+
+_PROVJERA_MODUL = None
+
+
+def _provjera():
+    """Modul s čistom jezgrom (`provjera_odgovora`) — **učitava se po putanji**.
+
+    Zašto po putanji: u istom pytest procesu postoji i v1 `provjera_odgovora` (druga mapa), pa bi
+    običan `import` uzeo pogrešan modul i sve bi završilo u „sumnja".
+    """
+    global _PROVJERA_MODUL
+    if _PROVJERA_MODUL is not None:
+        return _PROVJERA_MODUL
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    putanja = Path(__file__).resolve().parent / "provjera_odgovora.py"
+    ime = "caki_v2_provjera_odgovora"
+    try:
+        spec = importlib.util.spec_from_file_location(ime, putanja)
+        modul = importlib.util.module_from_spec(spec)
+        sys.modules[ime] = modul
+        spec.loader.exec_module(modul)
+        _PROVJERA_MODUL = modul
+    except Exception:                               # noqa: BLE001
+        import provjera_odgovora as modul         # rezerva
+
+        _PROVJERA_MODUL = modul
+    return _PROVJERA_MODUL
+
+
+def normalizuj(tekst) -> str:                       # noqa: F811 — namjerno prekriva staru verziju
+    """LaTeX → oblik za usporedbu. **Delegira** na `provjera_odgovora.normalizuj()`."""
+    try:
+        return _provjera().normalizuj(tekst)
+    except Exception:                               # noqa: BLE001
+        return model.tekst(tekst).strip()
+
+
+def ocjeni_izraz(tocan, odgovor, *, maks: float = 1.0) -> dict:
+    """Provjeri **izraz** protiv konačnog odgovora (slojevi: string → broj → SymPy → numerika).
+
+    Vraća v2 ugovor. `tocno = None` znači **sumnja** → izvor `?` (red čekanja profesora).
+    """
+    try:
+        rez = _provjera().uporedi(tocan, odgovor)
+    except Exception as e:                          # noqa: BLE001
+        return {"tocno": None, "bodovi": 0.0, "max": maks, "izvor": IZVOR_NEMA,
+                "sigurnost": "nema", "zasto": f"Provjera nije moguća: {e}"}
+
+    stanje = rez.get("tocno")
+    nacin = model.tekst(rez.get("nacin"))
+    if stanje is None:
+        return {"tocno": None, "bodovi": 0.0, "max": maks, "izvor": "?",
+                "sigurnost": "nema", "zasto": rez.get("zasto") or "Nesigurno — provjeri ručno."}
+    izvor = {"string": IZVOR_STRING, "broj": IZVOR_STRING,
+             "sympy": IZVOR_SYMPY, "numericki": IZVOR_SYMPY}.get(nacin, IZVOR_STRING)
+    return {"tocno": bool(stanje), "bodovi": float(maks) if stanje else 0.0, "max": maks,
+            "izvor": izvor, "sigurnost": "visoka" if stanje is not None else "nema",
+            "zasto": rez.get("zasto") or ""}
+
+
+UPUTA_AI = (
+    "Usporedi dva matematička izraza i reci jesu li ALGEBARSKI JEDNAKA. "
+    "Ne računaj numerički primjer — provjeri jednakost izraza. "
+    "Odgovori ISKLJUČIVO JSON: {\"jednako\": true|false|\"nesigurno\", \"razlog\": \"...\"}"
+)
+
+
+def ai_provjeri_izraz(tocan, odgovor, tekst: str = "", *, pozovi=None,
+                      kljuc: str = "", tajna: str = "") -> dict | None:
+    """AI kao **treći** sloj. `None` = AI nije dostupan/nije siguran.
+
+    `pozovi(poruke, kljuc, tajna)` je injektabilan (testovi bez mreže).
+    """
+    import json
+
+    poruke = [{"role": "system", "content": UPUTA_AI},
+              {"role": "user", "content": f"ZADATAK: {model.tekst(tekst)}\n"
+                                          f"TOČNO: {model.tekst(tocan)}\n"
+                                          f"UČENIK: {model.tekst(odgovor)}"}]
+    try:
+        if pozovi is None:
+            import ai_pomoc
+
+            odgovor_ai, greska = ai_pomoc.pitaj(poruke, kljuc=kljuc, tajna=tajna)
+        else:
+            odgovor_ai, greska = pozovi(poruke, kljuc, tajna)
+    except Exception:                               # noqa: BLE001
+        return None
+    if greska or not model.tekst(odgovor_ai):
+        return None
+    try:
+        podaci = json.loads(odgovor_ai[odgovor_ai.index("{"):odgovor_ai.rindex("}") + 1])
+    except Exception:                               # noqa: BLE001
+        return None
+    jednako = podaci.get("jednako")
+    if isinstance(jednako, str):
+        if jednako.lower() in ("true", "da", "jednako"):
+            jednako = True
+        elif jednako.lower() in ("false", "ne", "nije"):
+            jednako = False
+        else:
+            jednako = None
+    if jednako is None:
+        return None
+    return {"tocno": bool(jednako), "izvor": IZVOR_AI, "sigurnost": "srednja",
+            "zasto": model.tekst(podaci.get("razlog"))}
+

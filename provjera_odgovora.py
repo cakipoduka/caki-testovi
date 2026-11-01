@@ -193,6 +193,23 @@ def numericki_jednako(tocan, odgovor, *, tolerancija: float = 1e-9) -> bool | No
 
 # --- spajanje slojeva -----------------------------------------------------------
 
+DOPUSTENO = set("0123456789.-+*/() ")
+
+
+def obican_broj(izraz) -> float | None:
+    """Izračunaj čisto brojevni izraz (`(3)/(4)`, `7/8`, `-2.5`). `None` ako nije broj.
+
+    Sigurnost: računa se **samo** ako su svi znakovi dopušteni (nema slova, bez `eval` okoline).
+    """
+    s = normalizuj(izraz)
+    if not s or not set(s) <= DOPUSTENO or not any(z.isdigit() for z in s):
+        return None
+    try:
+        return float(eval(s, {"__builtins__": {}}, {}))     # noqa: S307 — skup znakova je ograničen
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
 def _kao_broj(tekst) -> float | None:
     try:
         return float(model.tekst(tekst).replace(",", ".").replace(" ", ""))
@@ -216,6 +233,13 @@ def uporedi(tocan, odgovor, *, tolerancija: float = 1e-9) -> dict:
     nt, no = normalizuj(t), normalizuj(o)
     if nt and nt.lower() == no.lower():
         return {"tocno": True, "nacin": "string", "zasto": "Isto nakon normalizacije."}
+
+    # 0b) čisto brojevni izrazi: `\frac{3}{4}` vs `0,75`
+    bt0, bo0 = obican_broj(t), obican_broj(o)
+    if bt0 is not None and bo0 is not None:
+        if abs(bt0 - bo0) <= tolerancija * max(1.0, abs(bt0)):
+            return {"tocno": True, "nacin": "broj", "zasto": f"{bt0:g} = {bo0:g}."}
+        return {"tocno": False, "nacin": "broj", "zasto": f"{bt0:g} != {bo0:g}."}
 
     # 1) brojevi (s jedinicama i bez)
     bt, bo = _kao_broj(bez_jedinice(t)), _kao_broj(bez_jedinice(o))

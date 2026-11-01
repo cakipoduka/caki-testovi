@@ -178,8 +178,13 @@ def _zadaci():
 
 @st.cache_data(ttl=60, show_spinner=False)
 def _testovi():
+    """Svi testovi — **uključujući arhivirane** (uvoz iz v1 namjerno stvara `arhiviran`).
+
+    Prije je `definicije.ucitaj_sve()` skrivao arhivirane, pa se uvezeni test nije vidio nigdje.
+    """
     try:
-        return definicije.ucitaj_sve(_sheet())
+        redci = tablice.ucitaj(_sheet(), tablice.TAB_DEFINICIJE)
+        return [r for r in redci if model.tekst(r.get("definicija_id"))]
     except Exception as e:                              # noqa: BLE001
         st.error(f"Testovi se ne mogu pročitati: {e}")
         return []
@@ -1714,10 +1719,15 @@ with tab_postavke:
                 for _pu in _nacrt.get("upozorenja") or []:
                     st.warning(_pu)
                 if _nacrt["dodjele"]:
-                    _potvrda = st.checkbox(
-                        "Potvrđujem upis u **živi** CRM Sheet (v2 tabovi)", key="v2_uvoz_potvrda")
-                    if st.button("📥 Uvezi u v2", type="primary", disabled=not _potvrda,
-                                 key="v2_uvoz_izvrsi"):
+                    # JEDNA forma: potvrda + uvoz u istom kliku (prije se stranica resetirala
+                    # između kvačice i gumba — Caki nije stigao pritisnuti „Uvezi").
+                    with st.form("v2_uvoz_forma"):
+                        _potvrda = st.checkbox(
+                            "Potvrđujem upis u **živi** CRM Sheet (v2 tabovi)",
+                            key="v2_uvoz_potvrda")
+                        _klik = st.form_submit_button("📥 Uvezi u v2", type="primary",
+                                                      disabled=not _potvrda)
+                    if _klik:
                         try:
                             _rez = uvoz_v1.izvrsi(_sheet(), _nacrt)
                         except Exception as _e_i:       # noqa: BLE001

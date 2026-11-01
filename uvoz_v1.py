@@ -529,8 +529,8 @@ def dopuni_ocjene(sheet, definicija_id: str) -> dict:
 
     did = model.tekst(definicija_id)
     izlaz = {"pokusaja": 0, "ocjena": 0, "bez_detalja": 0, "greske": []}
-    pokusaji = [p for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
-                if model.tekst(p.get("definicija_id")) == did]
+    svi = tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
+    pokusaji = ([p for p in svi if model.tekst(p.get("definicija_id")) == did] if did else svi)
     postojeci = {model.tekst(r.get("pokusaj_id")) for r in
                  tablice.ucitaj(sheet, tablice.TAB_OCJENE)}
 

@@ -1492,7 +1492,7 @@ with tab_postavke:
 
     st.markdown("**📄 Sheet koji aplikacija vidi**")
     try:
-        _dg = tablice.dijagnostika(_baza())
+        _dg = tablice.dijagnostika(_sheet())
         st.caption(f"Naslov: **{_dg['naslov'] or '—'}** · ID: `{_dg['id'] or '—'}` · "
                    f"tabova: **{_dg['tabova']}**")
         if _dg["naslovi"]:
@@ -1583,7 +1583,7 @@ with tab_postavke:
                 if st.button("🧮 Dopuni ocjene po zadatku (iz v1 detalji_json)",
                              key="v2_uvoz_ocjene"):
                     try:
-                        _do = uvoz_v1.dopuni_ocjene(_sheet(), _nacrt.get("definicija_id"))
+                        _do = uvoz_v1.dopuni_ocjene(_sheet(), "")
                         st.success(f"Pokušaja: **{_do['pokusaja']}**, ocjena upisano "
                                    f"**{_do['ocjena']}**, bez detalja **{_do['bez_detalja']}**.")
                         if _do["ocjena"]:

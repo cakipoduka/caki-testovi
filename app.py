@@ -327,7 +327,7 @@ with tab_testovi:
                                                        f"{model.tekst(_opcije_l[i].get('status'))}",
                                  key="v2_l_test")
         _d_l = _opcije_l[_odabir_l]
-        # ---------------------------------------------------------------- ✏️ UREDI TEST (kao v1)
+        # ---------------------------------------------------------------- ✏️ UREDI TEST (v1 obrazac)
         with st.expander("✏️ Uredi test (naziv, trajanje, rok, AI pomoć)"):
             try:
                 _smije_u, _zasto_u = definicije.smije_urediti(_sheet(), _d_l)
@@ -338,9 +338,9 @@ with tab_testovi:
                         _c1, _c2 = st.columns([3, 1])
                         _naziv_u = _c1.text_input("Naziv testa (vidi ga učenik)",
                                                   value=model.tekst(_d_l.get("naziv")))
-                        _traj_u = _c2.number_input("Trajanje (min)", min_value=5, max_value=240,
-                                                   step=5,
-                                                   value=int(model.broj(_d_l.get("trajanje_min"), 45)))
+                        _traj_u = _c2.number_input(
+                            "Trajanje (min)", min_value=5, max_value=240, step=5,
+                            value=int(model.broj(_d_l.get("trajanje_min"), 45)))
                         _c3, _c4, _c5 = st.columns(3)
                         _od_u = _c3.date_input("Otvoren od",
                                                value=definicije._danas(_d_l.get("rok_od")),
@@ -353,21 +353,17 @@ with tab_testovi:
                             value=model.tekst(_d_l.get("status")) == "objavljen")
                         _ai_u = st.checkbox(
                             "💡 Pomoć pri učenju dopuštena (bot kao profesor; nikad rješenje)",
-                            value=model.tekst(_d_l.get("ai_pomoc")).lower() == "da",
-                            help="Za provjere i ocjenjivane testove ostavi isključeno.")
+                            value=model.tekst(_d_l.get("ai_pomoc")).lower() == "da")
                         st.caption("Izmjena mijenja test kakav ga učenik vidi. Već predani "
-                                   "rezultati ostaju kakvi su bili — oni su dokaz što je učenik riješio.")
+                                   "rezultati ostaju kakvi su bili.")
                         if st.form_submit_button("💾 Spremi izmjene", type="primary"):
-                            _promjene = {
-                                "naziv": _naziv_u,
-                                "trajanje_min": _traj_u,
-                                "rok_od": _od_u.isoformat(),
-                                "rok_do": _do_u.isoformat(),
-                                "ai_pomoc": "da" if _ai_u else "ne",
-                                "status": "objavljen" if _akt_u else "zatvoren",
-                            }
-                            _ok_u, _raz_u = definicije.izmijeni(_sheet(), _d_l, _promjene,
-                                                                korisnik="caki")
+                            _ok_u, _raz_u = definicije.izmijeni(
+                                _sheet(), _d_l,
+                                {"naziv": _naziv_u, "trajanje_min": _traj_u,
+                                 "rok_od": _od_u.isoformat(), "rok_do": _do_u.isoformat(),
+                                 "ai_pomoc": "da" if _ai_u else "ne",
+                                 "status": "objavljen" if _akt_u else "zatvoren"},
+                                korisnik="caki")
                             if _ok_u:
                                 st.success(_raz_u)
                                 _osvjezi()
@@ -376,172 +372,36 @@ with tab_testovi:
 
                     _b1, _b2, _b3 = st.columns(3)
                     if _b1.button("⏸️ Deaktiviraj" if _status_l == "objavljen" else "✅ Aktiviraj",
-                                  key="v2_ur_akt"):
+                                  key=f"v2_ur_akt_{_odabir_l}"):
                         _ok_a, _raz_a = definicije.postavi_aktivan(
                             _sheet(), _odabir_l, _status_l != "objavljen", korisnik="caki")
-                        (st.success if _ok_a else st.error)(_raz_a)
-                        _osvjezi() if _ok_a else None
-                    if _b2.button("📄 Kloniraj", key="v2_ur_klon"):
+                        if _ok_a:
+                            st.success(_raz_a)
+                            _osvjezi()
+                        else:
+                            st.error(_raz_a)
+                    if _b2.button("📄 Kloniraj", key=f"v2_ur_klon_{_odabir_l}"):
                         _novi, _raz_k = definicije.kloniraj(_sheet(), _odabir_l, autor="caki")
-                        (st.success if _novi else st.error)(_raz_k)
+                        if _novi:
+                            st.success(_raz_k)
+                            _osvjezi()
+                        else:
+                            st.error(_raz_k)
                     _b3.caption("Kloniranje ne dira izvorni test ni njegove rezultate.")
                     with st.popover("⏹️ Zatvori test odmah"):
-                        st.caption("Rok se postavlja na **jučer**: nitko novi ne može pisati, a "
-                                   "predani odmah vide rješenja.")
-                        if st.button("⏹️ Zatvori odmah", key="v2_ur_zatvori", type="primary"):
+                        st.caption("Rok se postavlja na **jučer**: nitko novi ne može pisati, "
+                                   "a predani odmah vide rješenja.")
+                        if st.button("⏹️ Zatvori odmah", key=f"v2_ur_zat_{_odabir_l}",
+                                     type="primary"):
                             _ok_z, _raz_z = definicije.zatvori_odmah(_sheet(), _odabir_l,
                                                                      korisnik="caki")
-                            (st.success if _ok_z else st.error)(_raz_z)
-            except Exception as _e_u:                   # noqa: BLE001
-                st.caption(f"Uređivanje trenutno nije dostupno: {_e_u}")
-
-        # ---------------------------------------------------------------- ✏️ UREDI TEST (kao v1)
-        with st.expander("✏️ Uredi test (naziv, trajanje, rok, AI pomoć)"):
-            try:
-                _smije_u, _zasto_u = definicije.smije_urediti(_sheet(), _d_l)
-                if not _smije_u:
-                    st.warning(f"Uređivanje nije moguće: {_zasto_u}")
-                else:
-                    with st.form(f"v2_ur_forma_{_odabir_l}"):
-                        _c1, _c2 = st.columns([3, 1])
-                        _naziv_u = _c1.text_input("Naziv testa (vidi ga učenik)",
-                                                  value=model.tekst(_d_l.get("naziv")))
-                        _traj_u = _c2.number_input("Trajanje (min)", min_value=5, max_value=240,
-                                                   step=5,
-                                                   value=int(model.broj(_d_l.get("trajanje_min"), 45)))
-                        _c3, _c4, _c5 = st.columns(3)
-                        _od_u = _c3.date_input("Otvoren od",
-                                               value=definicije._danas(_d_l.get("rok_od")),
-                                               format="DD.MM.YYYY")
-                        _do_u = _c4.date_input("Otvoren do",
-                                               value=definicije._danas(_d_l.get("rok_do")),
-                                               format="DD.MM.YYYY")
-                        _akt_u = _c5.checkbox(
-                            "Aktivan (učenik ga vidi)",
-                            value=model.tekst(_d_l.get("status")) == "objavljen")
-                        _ai_u = st.checkbox(
-                            "💡 Pomoć pri učenju dopuštena (bot kao profesor; nikad rješenje)",
-                            value=model.tekst(_d_l.get("ai_pomoc")).lower() == "da",
-                            help="Za provjere i ocjenjivane testove ostavi isključeno.")
-                        st.caption("Izmjena mijenja test kakav ga učenik vidi. Već predani "
-                                   "rezultati ostaju kakvi su bili — oni su dokaz što je učenik riješio.")
-                        if st.form_submit_button("💾 Spremi izmjene", type="primary"):
-                            _promjene = {
-                                "naziv": _naziv_u,
-                                "trajanje_min": _traj_u,
-                                "rok_od": _od_u.isoformat(),
-                                "rok_do": _do_u.isoformat(),
-                                "ai_pomoc": "da" if _ai_u else "ne",
-                                "status": "objavljen" if _akt_u else "zatvoren",
-                            }
-                            _ok_u, _raz_u = definicije.izmijeni(_sheet(), _d_l, _promjene,
-                                                                korisnik="caki")
-                            if _ok_u:
-                                st.success(_raz_u)
+                            if _ok_z:
+                                st.success(_raz_z)
                                 _osvjezi()
                             else:
-                                st.error(_raz_u)
-
-                    _b1, _b2, _b3 = st.columns(3)
-                    if _b1.button("⏸️ Deaktiviraj" if _status_l == "objavljen" else "✅ Aktiviraj",
-                                  key="v2_ur_akt"):
-                        _ok_a, _raz_a = definicije.postavi_aktivan(
-                            _sheet(), _odabir_l, _status_l != "objavljen", korisnik="caki")
-                        (st.success if _ok_a else st.error)(_raz_a)
-                        _osvjezi() if _ok_a else None
-                    if _b2.button("📄 Kloniraj", key="v2_ur_klon"):
-                        _novi, _raz_k = definicije.kloniraj(_sheet(), _odabir_l, autor="caki")
-                        (st.success if _novi else st.error)(_raz_k)
-                    _b3.caption("Kloniranje ne dira izvorni test ni njegove rezultate.")
-                    with st.popover("⏹️ Zatvori test odmah"):
-                        st.caption("Rok se postavlja na **jučer**: nitko novi ne može pisati, a "
-                                   "predani odmah vide rješenja.")
-                        if st.button("⏹️ Zatvori odmah", key="v2_ur_zatvori", type="primary"):
-                            _ok_z, _raz_z = definicije.zatvori_odmah(_sheet(), _odabir_l,
-                                                                     korisnik="caki")
-                            (st.success if _ok_z else st.error)(_raz_z)
+                                st.error(_raz_z)
             except Exception as _e_u:                   # noqa: BLE001
                 st.caption(f"Uređivanje trenutno nije dostupno: {_e_u}")
-
-        # 🗑 BRISANJE TESTA (Caki 31.10.2026.) — uz potvrdu, čuva dokaze
-        with st.expander("🗑 Obriši test"):
-            st.caption("Brisanje je trajno. Test s **ijednim pokušajem** ne može se obrisati — "
-                       "tada ga **arhiviraj** (podaci ostaju kao dokaz).")
-            _potvrda = st.checkbox("Potvrđujem da želim trajno obrisati ovaj test",
-                                   key="v2_brisi_potvrda")
-            if st.button("🗑 Obriši test", type="secondary", key="v2_brisi_test",
-                         disabled=not _potvrda):
-                _ok, _razlog = definicije.obrisi(_sheet(), _odabir_l, korisnik="caki")
-                if _ok:
-                    st.success(_razlog)
-                    _osvjezi()
-                else:
-                    st.error(_razlog)
-                    if "pokušaja" in _razlog:
-                        st.caption("Savjet: ostavi test u statusu `arhiviran` — skriva se iz "
-                                   "popisa, a rezultati i dokazi ostaju.")
-
-        _smije_l, _razlog_l = definicije.smije_urediti(_sheet(), _d_l)
-        _status_l = model.tekst(_d_l.get("status"))
-
-        c1, c2, c3 = st.columns(3)
-        # --- pauza / puštanje
-        if _status_l == "objavljen":
-            if c1.button("⏸️ Učini nedostupnim učenicima", key="v2_l_pauza",
-                         help="Test prelazi u „zatvoren” — učenici ga ne mogu otvoriti ni predati."):
-                try:
-                    definicije.promijeni_status(_sheet(), _odabir_l, "zatvoren", korisnik="caki")
-                    st.success("Test je nedostupan učenicima. Sada ga možeš urediti.")
-                    _osvjezi()
-                except Exception as e:                  # noqa: BLE001
-                    st.error(f"Nije uspjelo: {e}")
-        elif _status_l == "zatvoren":
-            if c1.button("▶️ Ponovno pusti učenicima", key="v2_l_pusti",
-                         help="Vraća test u „objavljen” — učenici ga opet vide."):
-                try:
-                    definicije.promijeni_status(_sheet(), _odabir_l, "objavljen", korisnik="caki")
-                    st.success("Test je ponovno dostupan učenicima.")
-                    _osvjezi()
-                except Exception as e:                  # noqa: BLE001
-                    st.error(f"Nije uspjelo: {e}")
-        else:
-            c1.caption(f"Status: **{_status_l}**")
-
-        c2.caption("✏️ " + ("mijenjanje dopušteno — " + _razlog_l if _smije_l else _razlog_l))
-        if c3.button("📊 Vidi rezultate", key="v2_l_rez"):
-            st.session_state["v2_rez_test"] = _odabir_l
-            st.caption("Rezultati su u kartici 📊 Rezultati (test je tamo već odabran).")
-
-        # --- uređivanje
-        if _smije_l:
-            with st.expander("✏️ Uredi test (naziv, trajanje, rokovi, napomena)"):
-                with st.form(f"v2_uredi_{_odabir_l}"):
-                    u1, u2 = st.columns(2)
-                    _n_naziv = u1.text_input("Naziv", value=model.tekst(_d_l.get("naziv")))
-                    _n_nap = u2.text_input("Napomena", value=model.tekst(_d_l.get("napomena")))
-                    u3, u4, u5 = st.columns(3)
-                    _n_traj = u3.number_input("Trajanje (min)", 5, 240,
-                                              model.cijeli(_d_l.get("trajanje_min"), 45), 5)
-                    _n_od = u4.date_input("Rok od",
-                                          value=model.datum(_d_l.get("rok_od")) or model.sada().date())
-                    _n_do = u5.date_input("Rok do",
-                                          value=model.datum(_d_l.get("rok_do")) or model.sada().date())
-                    if st.form_submit_button("💾 Spremi izmjene", type="primary"):
-                        try:
-                            if _n_do < _n_od:
-                                st.error("Rok „do” ne može biti prije roka „od”.")
-                            else:
-                                definicije.izmijeni(_sheet(), _d_l, {
-                                    "naziv": _n_naziv, "napomena": _n_nap,
-                                    "trajanje_min": int(_n_traj),
-                                    "rok_od": model.iso_datum(_n_od),
-                                    "rok_do": model.iso_datum(_n_do),
-                                }, korisnik="caki")
-                                st.success("Izmjene spremljene.")
-                                _osvjezi()
-                        except Exception as e:          # noqa: BLE001
-                            st.error(f"Nije spremljeno: {e}")
-
 
 with tab_pdf:
     upute.prikazi(st, "pdf")

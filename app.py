@@ -32,6 +32,7 @@ import dodjele
 import ekran_ucenika
 import grupe
 import izvjestaj
+import matrica
 import model
 import slike_zadataka
 import tablice
@@ -1349,6 +1350,23 @@ with tab_rezultati:
                                 st.error("Nije spremljeno — postoji li ocjena tog zadatka?")
         except Exception as _e_rp:                      # noqa: BLE001
             st.caption(f"Ručna provjera trenutno nije dostupna: {_e_rp}")
+
+    # ---------------------------------------------------------------- 📋 MATRICA ODGOVORA
+    with st.expander("📋 Matrica odgovora (učenik × zadatak)"):
+        try:
+            _zad_m = definicije.zadaci(d)
+            _ocj_m = tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
+            _redci_m = matrica.redci(_zad_m, dod, pok, _ocj_m)
+            if not _redci_m:
+                st.caption("Nema dodjela za ovaj test.")
+            else:
+                st.caption("✓ točno (zeleno) · ✗ netočno (crveno) · — nema odgovora (sivo)")
+                st.markdown(matrica.html(_redci_m, _zad_m), unsafe_allow_html=True)
+                st.download_button("⬇ Preuzmi CSV", matrica.csv(_redci_m),
+                                   file_name=f"matrica_{model.tekst(d.get('definicija_id'))}.csv",
+                                   mime="text/csv", key="v2_matrica_csv")
+        except Exception as _e_m:                       # noqa: BLE001
+            st.caption(f"Matrica trenutno nije dostupna: {_e_m}")
 
 with tab_kvaliteta:
     upute.prikazi(st, "kvaliteta")

@@ -369,6 +369,68 @@ nakon predaje i da `izvor_ocjene == "?"` dolazi iz `Ocjene_zadataka`. Učenik **
 
 ---
 
+## 12. Preračun **već predanih** testova i ručni ispravak (dodano 1.11.2026., 14:00)
+
+**Cakijevo pitanje (1.11.2026.):** „Jel moguće ispraviti već predane testove — bodovanje koje nije
+pravilno napravljeno? Gdje se ispravka radi i gdje mogu promijeniti bodovanje za zadatak? Ne vidim
+opcije." — Odgovor je **da**, i to je u v1 napravljeno istog dana. **v2 to mora imati također**, jer
+će i on imati povijesne pokušaje ocijenjene starom logikom.
+
+### 12.1 Dvije stvari, ne jedna
+
+| Što | Kada | Što dira |
+|---|---|---|
+| **🧮 Preračun** (automatski) | cijeli test ocijenjen starom logikom; svi zadaci odjednom | ponovno ocijeni iz sačuvanih odgovora |
+| **✏️ Ručni ispravak** (po zadatku) | jedan učenik, jedan zadatak; djelomični bodovi | jedna ocjena |
+
+### 12.2 Preračun — kako radi (i zašto je pošten)
+
+1. **Izvor istine su sačuvani odgovori**, ne ponovno rješavanje: `Pokusaji.odgovori_json` +
+   **zamrznuti** zadaci u `Pokusaji.zadaci_json` (v2 ih već čuva od 30.10., §12.11.4). Ako
+   `zadaci_json` fali, uzmi zadatke iz `Definicije_testova` i **napiši upozorenje** da se koristi
+   trenutna verzija testa.
+2. Ponovno se pozove `ocjenjivanje.ocjeni_zadatke(...)` (ista funkcija kao kod predaje) — nema
+   drugog puta ocjenjivanja, inače preračun i stvarna ocjena mogu se razići.
+3. **Preskoči** pokušaje koje je profesor već ručno dirao (`Ocjene_zadataka.izvor_ocjene` =
+   `profesor` ili postoji zapis u `Izmjene_ocjena`) — inače preračun pregazi profesorovu odluku.
+   Caki to može svjesno nadjačati kvačicom.
+4. **Prvo prikaz, pa upis.** Tablica: učenik · prije (b) · poslije (b) · prije (%) · poslije (%).
+   Upis ide tek uz kvačicu „potvrđujem" i gumb; piše se **samo**: `Ocjene_zadataka` (tocno, bodovi,
+   izvor_ocjene, komentar), `Pokusaji.bodovi`/`bodovi_max`, i `Dnevnik_radnji` zapis
+   (`preracun`, tko, koliko). **`odgovori_json` se nikad ne mijenja.**
+5. Nakon upisa: `st.cache_data.clear()` (inače ekran pokazuje stare bodove) + zapis u
+   `Izmjene_ocjena` s razlogom `preracun` (GDPR trag: „zašto se ocjena promijenila").
+
+### 12.3 Ručni ispravak — bilo koji pokušaj, ne samo „čeka"
+
+Cakijeva primjedba je bila da **nije bilo opcije**: u v1 je stranica prikazivala samo rezultate sa
+statusom `ceka`, pa rezultat ocijenjen prije tog statusa nije imao gdje biti ispravljen. U v2:
+popis **svih** pokušaja → odabir → svi zadaci s odgovorom i ključem → odluka
+**✅ točno · 🟡 djelomično (upis bodova) · ❌ netočno · — ostavi kako je —** → jedan gumb.
+
+- Djelomični bodovi: `bodovi` je 0…`max`; `tocno` je istina **samo** ako je dosegnut `max`.
+- Svaka izmjena ide kroz `izmjene_ocjena.zapisi(...)` (`povod = profesor_sam_primijetio`).
+- **Obavezno** preračunaj `Pokusaji.bodovi` iz `Ocjene_zadataka` (G5 iz §3 — u v2 to danas ne radi).
+
+### 12.4 Zamka koja je uhvaćena u v1 (prenesi je)
+
+`@st.cache_data` / `@st.cache_resource` **ne uključuju u ključ keša parametre koji počinju s `_`**.
+Ako funkcija glasi `def _podaci(_id: str)`, podaci dvaju različitih Sheetova se zamijene.
+Piši `def _podaci(sheet_id: str)`.
+
+### 12.5 Testovi (obavezno)
+
+1. Preračun 13 redaka iz §1: stari rezultat (svi `netocno`) → **svi `tocno`**, 0 → puni bodovi.
+2. Preračun je **idempotentan** — drugi prolaz nema promjena.
+3. Preračun **preskače** ručno provjerene; `odgovori_json` prazan → poruka „nema sačuvanih odgovora".
+4. Upis preračuna **ne dira** `odgovori_json` (provjeri adrese ćelija).
+5. Ručni ispravak s `bodovi = 1.5` od `max = 3` → 1.5 b, `tocno = False`, ukupno preračunato.
+6. Ručni ispravak iznad `max` se reže na `max`.
+7. **Ručni ispravak radi i za pokušaj koji nije `ceka`** (to je bio Cakijev nalaz).
+8. AppTest stranice: preračun pokaže „Mijenja se: 1" i **ništa ne upiše** bez potvrde.
+
+---
+
 📌 **COMMIT:** mapa `caki-testovi` → repo `caki-testovi` → grana **main** → ✅ ide uživo nakon
 Push + Reboot — **ali tek kad su ispunjeni svi kriteriji iz §9.**
 📌 **COMMIT:** `testovi/test_v2_provjera_odgovora.py` — nije u gitu, samo lokalno.

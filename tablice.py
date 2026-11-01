@@ -9,6 +9,7 @@ Pravilo: **nijedan drugi modul ne uvozi gspread.** Ako nešto treba podatke, tra
 """
 from __future__ import annotations
 
+import streamlit as st
 import re
 import threading
 
@@ -158,6 +159,27 @@ def _postojeci_tab(sheet, tab: str):
     return None
 
 
+def _sheet_iz_secrets():
+    """Otvori CRM Sheet iznova iz Secrets (zaobilazi i predmemoriju objekta)."""
+    try:
+        import veza
+
+        klijent = veza.klijent()
+        for kljuc in ("CRM_SHEET_ID", "SHEET_ID"):
+            try:
+                sid = _kao_tekst(st.secrets.get(kljuc))
+            except Exception:                           # noqa: BLE001
+                sid = ""
+            if sid:
+                try:
+                    return klijent.open_by_key(sid)
+                except Exception:                       # noqa: BLE001
+                    continue
+    except Exception:                                   # noqa: BLE001
+        pass
+    return None
+
+
 def _tab_po_indeksu(sheet, tab: str):
     """Nađi tab prolaskom po INDEKSU (0..60) i usporedbom naslova — najrobusnija varijanta."""
     cilj = _normal_ime(tab)
@@ -207,6 +229,12 @@ def dijagnostika(sheet) -> dict:
     naslovi = _naslovi_tabova(sheet)
     info["naslovi"] = naslovi[:10]
     info["tabova"] = len(naslovi)
+    # 01.11.2026.: točni zapisi imena (nevidljivi znakovi / razmaci) — za rješavanje
+    # „tab postoji ali se ne može otvoriti"
+    info["naslovi_repr"] = [repr(n) for n in naslovi[:10]]
+    info["ima_dodjele_ispita"] = any(
+        _normal_ime(n) == _normal_ime("Dodjele_ispita") for n in naslovi)
+    info["ima_dodjele"] = any(_normal_ime(n) == _normal_ime("Dodjele") for n in naslovi)
     if not naslovi:
         try:
             sheet.worksheets()
@@ -259,8 +287,21 @@ def osiguraj(sheet, tab: str):
     _provjeri_pisanje()
     zaglavlje = ZAGLAVLJA.get(tab) or ["id"]
 
+    # 0) PRISILNO osvježi metapodatke — gspread drži stari popis tabova u memoriji
+    try:
+        sheet.fetch_sheet_metadata()
+    except Exception:                                   # noqa: BLE001
+        pass
+
     # 1) izravno
     try:
+        return sheet.worksheet(tab)
+    except Exception:                                   # noqa: BLE001
+        pass
+
+    # 1b) ponovno, s dodatnim parametrima (gspread nekad traži `params`)
+    try:
+        sheet.fetch_sheet_metadata({"fields": "sheets.properties.title"})
         return sheet.worksheet(tab)
     except Exception:                                   # noqa: BLE001
         pass
@@ -300,6 +341,12 @@ def osiguraj(sheet, tab: str):
                 _osvjezi_metapodatke(sheet)
                 try:
                     return sheet.worksheet(tab)
+                except Exception:                       # noqa: BLE001
+                    pass
+            svjez2 = _sheet_iz_secrets()
+            if svjez2 is not None:
+                try:
+                    return svjez2.worksheet(tab)
                 except Exception:                       # noqa: BLE001
                     pass
             po_indeksu = _tab_po_indeksu(sheet, tab)

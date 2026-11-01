@@ -7,3 +7,4 @@ sympy>=1.12
 pandas
 reportlab
 streamlit-mathlive==0.0.3
+antlr4-python3-runtime==4.11.1

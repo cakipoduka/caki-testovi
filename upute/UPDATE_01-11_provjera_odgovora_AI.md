@@ -111,6 +111,7 @@ kostur** — dopunjuje se.
 | `razdvoji_jedinicu(s)` | `("254.55", "cm")` |
 | `brojevi(tekst)` | `[7.5]` |
 | `blizu(kljuc, odgovor)` | `bool` — je li kandidat za AI/profesora |
+| `bez_suvisnih_zagrada(izraz)` | skida zagrade koje ne mijenjaju vrijednost (`((3-a))` → `(3-a)`, `(3a)` → `3a`) |
 | `uporedi(kljuc, odgovor)` | `{"status", "izvor", "zasto"}` — **deterministički** |
 | `odluci(kljuc, odgovor, *, tekst="", pozovi=None, dopusti_ai=True)` | isto, ali s AI-jem |
 | `ai_uporedi(kljuc, odgovor, tekst="", pozovi=None)` | `{"tocno","sigurnost","zasto"}` ili `None` |
@@ -329,6 +330,31 @@ ukupni bodovi ostali stari. (I usput: `provedba.py:361` ima `ok = tablice.azurir
 `rjesavanje.poruka_o_cekanju(broj)` već postoji — provjeri da se **stvarno prikazuje** u pregledu
 nakon predaje i da `izvor_ocjene == "?"` dolazi iz `Ocjene_zadataka`. Učenik **ne smije** vidjeti
 „0 bodova" bez objašnjenja.
+
+### 8.4 Prikaz formule + „sve na jednom mjestu" (Cakijeve primjedbe 1.11.2026.)
+
+**(a) Formula, ne izvorni kod.** Na ekranu provjere učenikov se odgovor prikazivao kao
+`\mathrm{\frac{\left(3-a\right)}{3a}}`, a ključ kao formula — ne može se očima usporediti.
+Pravilo:
+- ako zapis sadrži LaTeX (`\frac`, `\mathrm`, `\left`, `^…{`, ili `$…$`) → prikaži ga **kao formulu**
+  (`st.markdown(f"> ${zapis}$")`, odnosno `st.latex`), a **izvorni zapis sitno ispod** (`st.caption`,
+  u backtickama) da se vidi je li dobro prepisan;
+- običan tekst („58 eura") ostaje običan tekst — ne zamataj ga u `$…$`.
+- **`\degree` zamijeni s `^{\circ}`** i `^{\prime}` s `'` prije prikaza: KaTeX u Streamlitu ne poznaje
+  `\degree` i formula bi pukla. (Pazi: u `re.sub` zamjena mora biti **raw** string, inače
+  `bad escape \c`.)
+- za `sumnja` dodaj i redak **„usporedba nakon normalizacije"** (`normalizuj(odgovor)` prema
+  `normalizuj(ključ)`) — profesor tako vidi zašto sustav nije odlučio.
+
+**(b) Jedno mjesto, ne dvije stranice.** Provjera ne smije biti samo zasebna stranica u izborniku —
+Caki ju je tražio i **nije ju našao**. U v2: **tab `🧑‍🏫 Provjera` unutar kartice `📝 Testovi`**
+(`app.py`, uz postojeće tabove), a sučelje u **jednom modulu** (`provjera_ocjena.py`) koje zove i
+kartica i (po potrebi) zasebna stranica. Ako se kod kopira na dva mjesta, razići će se.
+
+**(c) Zagrade iz `\left( … \right)`.** Isti dan je otkriveno da je `\mathrm{\frac{\left(3-a\right)}{3a}}`
+označen kao `sumnja`, iako je identičan ključu `\frac{3-a}{3a}` — `\left(`/`\right)` ostave dodatne
+zagrade (`((3-a))/(3a)`). Zato je u `provjera_odgovora.py` dodan `bez_suvisnih_zagrada()` i usporedba
+s njim. **Kad prenosiš modul, prenesi i to** (v. §4 — kopiraj cijelu datoteku, ne pojedine funkcije).
 
 ---
 

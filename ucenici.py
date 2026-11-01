@@ -80,7 +80,9 @@ def pretrazi(ucenici: list[dict], upit: str) -> list[dict]:
         return list(ucenici or [])
     izlaz = []
     for u in ucenici or []:
-        polje = _normal(" ".join([model.tekst(u.get("ime")), model.tekst(u.get("email")),
+        polje = _normal(" ".join([model.tekst(u.get("ucenik_id")),
+                                  model.tekst(u.get("ime")),
+                                  model.tekst(u.get("email")),
                                   model.tekst(u.get("grupa"))]))
         if all(r in polje for r in rijeci):
             izlaz.append(u)
@@ -157,4 +159,81 @@ def svi_ucenici(sheet, sheet_crm=None) -> list[dict]:
     except Exception:                                  # noqa: BLE001
         pass
 
+    # 3) svi tabovi koji liče na popise učenika (matura/upisi/instrukcije)
+    for sifra, ime in iz_svih_tabova(sheet).items():
+        _dodaj(sifra, ime, "baza učenika")
+
     return sorted(izlaz.values(), key=lambda x: (x["ime"] or x["ucenik_id"]).lower())
+
+# ------------------------------------------------------------------ cijela baza (svi tabovi)
+
+# Nazivi tabova koji sadrže popise učenika kroz godine
+TABOVI_UCENIKA_OBRASCI = ("ucenici", "polaznici", "matura", "upisi", "instrukcije",
+                          "učenici", "studenti", "djeca")
+
+POLJA_SIFRE = ("ucenik_id", "sifra", "šifra", "sifra_ucenika", "kod", "id", "oznaka")
+POLJA_IMENA_SIROKO = ("ime", "ime_djeteta", "ucenik", "polaznik", "naziv", "ime_prezime",
+                      "dijete", "osoba")
+
+
+def _tab_lici_na_ucenike(naslov: str) -> bool:
+    n = _normal(naslov)
+    return any(obrazac in n for obrazac in TABOVI_UCENIKA_OBRASCI)
+
+
+def _sifra_iz_retka(redak: dict) -> str:
+    """Šifra učenika — prvi stupac koji izgleda kao šifra (A-Z + brojke, 4–10 znakova)."""
+    import re
+
+    for ime in POLJA_SIFRE:
+        vrijednost = model.tekst(redak.get(ime)).upper()
+        if re.fullmatch(r"[A-Z]{1,3}[-\s]?\d{3,6}", vrijednost):
+            return vrijednost
+    # rezerva: bilo koja ćelija koja izgleda kao šifra
+    for vrijednost in (redak or {}).values():
+        kandidat = model.tekst(vrijednost).upper()
+        if re.fullmatch(r"[A-Z]{2}\d{4}", kandidat):
+            return kandidat
+    return ""
+
+
+def _ime_iz_retka(redak: dict) -> str:
+    """Ime učenika — prvo polje s barem dva slova i razmakom (ime i prezime) ili jedno ime."""
+    for ime in POLJA_IMENA_SIROKO:
+        vrijednost = model.tekst(redak.get(ime))
+        if len(vrijednost) >= 3 and sum(z.isalpha() for z in vrijednost) >= 3:
+            return vrijednost
+    for vrijednost in (redak or {}).values():
+        kandidat = model.tekst(vrijednost)
+        if " " in kandidat and sum(z.isalpha() for z in kandidat) >= 5:
+            return kandidat
+    return ""
+
+
+def iz_svih_tabova(sheet) -> dict[str, str]:
+    """Sve šifre i imena iz svih tabova koji liče na popis učenika: {ŠIFRA: ime}."""
+    import tablice
+
+    izlaz: dict[str, str] = {}
+    try:
+        naslovi = [model.tekst(w.title) for w in sheet.worksheets()]
+    except Exception:                                   # noqa: BLE001
+        return izlaz
+
+    for naslov in naslovi:
+        if not _tab_lici_na_ucenike(naslov):
+            continue
+        try:
+            redci = tablice.ucitaj(sheet, naslov)
+        except Exception:                               # noqa: BLE001
+            continue
+        for redak in redci or []:
+            sifra = _sifra_iz_retka(redak)
+            if not sifra:
+                continue
+            ime = _ime_iz_retka(redak)
+            if ime and not izlaz.get(sifra):
+                izlaz[sifra] = ime
+            else:
+                izlaz.setdefault(sifra, izlaz.get(sifra, ""))
+    return izlaz

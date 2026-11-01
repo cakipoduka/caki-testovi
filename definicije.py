@@ -426,31 +426,115 @@ def obrisi(sheet, definicija_id: str, *, korisnik: str = "") -> tuple[bool, str]
                                       if obrisane_dodjele else ""))
 
 
-def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "caki",
-             danas=None) -> dict:
-    """Izmijeni test ako je dopušteno. Vraća novi zapis (ili baca `ValueError` s razlogom)."""
-    smije, razlog = smije_urediti(sheet, definicija, danas=danas)
+def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "") -> tuple[bool, str]:
+    """Izmijeni test kakav ga učenik vidi (kao v1 `testovi_admin` L2071–2121).
+
+    Dopuštena polja: `naziv`, `trajanje_min`, `rok_od`, `rok_do`, `ai_pomoc`, `napomena`, `status`.
+    **Ne mijenja** zadatke (`zadaci_json`) — to je drugi posao. Blokira se ako test ima pokušaja
+    (`smije_urediti`).
+    """
+    d = definicija or {}
+    did = model.tekst(d.get("definicija_id"))
+    if not did:
+        return False, "Nedostaje ID testa."
+
+    smije, razlog = smije_urediti(sheet, d)
     if not smije:
-        raise ValueError(razlog)
-    dopusteno = {"naziv", "napomena", "trajanje_min", "rok_od", "rok_do", "student_view_json",
-                 "vrsta", "predmet"}
-    izmjene = {k: v for k, v in (promjene or {}).items() if k in dopusteno}
-    if not izmjene:
-        raise ValueError("Nema dopuštenih polja za izmjenu.")
-    tablice.azuriraj(sheet, tablice.TAB_DEFINICIJE, "definicija_id",
-                     model.tekst(definicija.get("definicija_id")), izmjene)
-    zapisi_radnju = getattr(tablice, "zapisi_radnju", None)
-    if zapisi_radnju:
+        return False, razlog
+
+    dopusteno = ("naziv", "trajanje_min", "rok_od", "rok_do", "ai_pomoc", "napomena", "status")
+    polja = {k: v for k, v in (promjene or {}).items() if k in dopusteno}
+    if not polja:
+        return False, "Nema dopuštenih polja za izmjenu."
+
+    if "naziv" in polja and not model.tekst(polja["naziv"]):
+        return False, "Naziv ne smije biti prazan."
+    if "trajanje_min" in polja:
         try:
-            zapisi_radnju(sheet, korisnik, "izmjena_testa",
-                          model.tekst(definicija.get("definicija_id")),
-                          ", ".join(sorted(izmjene)))
-        except Exception:                              # noqa: BLE001
+            polja["trajanje_min"] = max(5, int(float(polja["trajanje_min"])))
+        except (TypeError, ValueError):
+            return False, "Trajanje mora biti broj minuta."
+    if "ai_pomoc" in polja:
+        polja["ai_pomoc"] = "da" if model.tekst(polja["ai_pomoc"]).lower() in (
+            "da", "1", "true", "✅") else "ne"
+    if "status" in polja and model.tekst(polja["status"]) not in (
+            "nacrt", "objavljen", "zatvoren", "arhiviran"):
+        return False, "Nepoznat status."
+
+    try:
+        ok = tablice.azuriraj(sheet, tablice.TAB_DEFINICIJE, "definicija_id", did, polja)
+    except Exception as e:                              # noqa: BLE001
+        return False, f"Izmjena nije upisana: {e}"
+    if ok and korisnik:
+        try:
+            tablice.zapisi_radnju(sheet, korisnik, "izmjena_testa", did,
+                                  ", ".join(sorted(polja)))
+        except Exception:                               # noqa: BLE001
             pass
-    return {**definicija, **izmjene}
+    return bool(ok), "Spremljeno." if ok else "Redak nije nađen."
 
 
-# ------------------------------------------------------------------ AI pomoć (da/ne po testu)
+def postavi_aktivan(sheet, definicija_id: str, aktivan: bool, *, korisnik: str = "") -> tuple[bool, str]:
+    """v1 „Aktivan / Deaktiviraj": učenik ga vidi ili ne (rezultati ostaju)."""
+    d = po_id(sheet, definicija_id)
+    if not d:
+        return False, "Test ne postoji."
+    return izmijeni(sheet, d, {"status": "objavljen" if aktivan else "zatvoren"},
+                    korisnik=korisnik)
+
+
+def zatvori_odmah(sheet, definicija_id: str, *, korisnik: str = "") -> tuple[bool, str]:
+    """v1 „Zatvori test odmah" (L2137): rok se postavlja na **jučer** → nitko novi ne piše, a
+    predani odmah vide rješenja."""
+    from datetime import date, timedelta
+
+    d = po_id(sheet, definicija_id)
+    if not d:
+        return False, "Test ne postoji."
+    jučer = (date.today() - timedelta(days=1)).isoformat()
+    ok, razlog = izmijeni(sheet, d, {"rok_do": jučer}, korisnik=korisnik)
+    if ok:
+        try:
+            tablice.zapisi_radnju(sheet, korisnik or "caki", "zatvori_odmah",
+                                  model.tekst(definicija_id), f"rok_do={jučer}")
+        except Exception:                               # noqa: BLE001
+            pass
+    return ok, "Test zatvoren — rješenja su otvorena." if ok else razlog
+
+
+def kloniraj(sheet, definicija_id: str, *, autor: str = "") -> tuple[dict | None, str]:
+    """v1 „Kloniraj" (L2154): novi test s ISTIM zadacima; izvorni i rezultati se ne diraju.
+
+    Razlika prema v1 (namjerno): v1 klon odmah objavi, a v2 klon ostaje **nacrt** — u v2 objava
+    znači dodjele, pa se klon objavljuje kroz 👥 Objavi.
+    """
+    d = po_id(sheet, definicija_id)
+    if not d:
+        return None, "Test ne postoji."
+    postojeci = tablice.svi_idovi(sheet, tablice.TAB_DEFINICIJE, "definicija_id")
+    novi_id = tablice.novi_id(postojeci, "T26-")
+    novi = dict(d)
+    novi.update({
+        "definicija_id": novi_id,
+        "naziv": (model.tekst(d.get("naziv")) + " (kopija)")[:120],
+        "status": "nacrt",
+        "autor": model.tekst(autor) or model.tekst(d.get("autor")),
+        "kreirano": model.sada_iso(),
+    })
+    zaglavlje = tablice.ZAGLAVLJA[tablice.TAB_DEFINICIJE]
+    try:
+        tablice.dodaj(sheet, tablice.TAB_DEFINICIJE,
+                      [{k: novi.get(k, "") for k in zaglavlje}])
+    except Exception as e:                              # noqa: BLE001
+        return None, f"Klon nije spremljen: {e}"
+    try:
+        tablice.zapisi_radnju(sheet, model.tekst(autor) or "caki", "kloniran_test",
+                              novi_id, f"izvorni={model.tekst(definicija_id)}")
+    except Exception:                                   # noqa: BLE001
+        pass
+    return novi, f"Novi test `{novi_id}` s istim zadacima (status: nacrt)."
+
+
 
 def smije_ai(definicija: dict) -> bool:
     """Je li AI pomoć učeniku dopuštena za OVAJ test? (Cakijeva odluka pri objavi.)

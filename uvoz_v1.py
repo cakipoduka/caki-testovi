@@ -702,3 +702,30 @@ def rebuild_dodjele(sheet, definicija_id: str) -> dict:
         except Exception as e:                          # noqa: BLE001
             izlaz["greske"].append(f"dodavanje: {e}")
     return izlaz
+
+def dopuni_imena(sheet) -> dict:
+    """Popuni `ime_djeteta` u `Dodjele_ispita` iz v1 `Rezultati_testova` (po `ucenik_id`)."""
+    izlaz = {"dopunjeno": 0, "bez_imena": 0}
+    imena = {}
+    for r in _v1_tablica(sheet, V1_REZ_TAB):
+        uid = model.tekst(r.get("ucenik_id")).upper()
+        ime = model.tekst(r.get("ime_djeteta"))
+        if uid and ime:
+            imena[uid] = ime
+    if not imena:
+        return izlaz
+    for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
+        uid = model.tekst(d.get("ucenik_id")).upper()
+        if not uid or model.tekst(d.get("ime_djeteta")):
+            continue
+        ime = imena.get(uid)
+        if not ime:
+            izlaz["bez_imena"] += 1
+            continue
+        try:
+            if tablice.azuriraj(sheet, tablice.TAB_DODJELE, "dodjela_id",
+                                model.tekst(d.get("dodjela_id")), {"ime_djeteta": ime}):
+                izlaz["dopunjeno"] += 1
+        except Exception:                               # noqa: BLE001
+            pass
+    return izlaz

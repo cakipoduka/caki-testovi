@@ -26,8 +26,10 @@ import analiza_rezultata
 import provedba
 import provjera_ocjena
 import posjete
+import po_uceniku
 import podsjetnik
 import banka
+import brend
 import builder
 import definicije
 import dodjele
@@ -297,8 +299,8 @@ with st.sidebar:
 
     st.divider()
 
-tab_testovi, tab_pdf, tab_objavi, tab_rezultati, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
-    ["🧪 Testovi", "🧱 Složi test", "👥 Objavi", "📊 Rezultati", "📈 Kvaliteta", "🎓 Ocjene",
+tab_testovi, tab_pdf, tab_objavi, tab_rezultati, tab_pouceniku, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
+    ["🧪 Testovi", "🧱 Složi test", "👥 Objavi", "📊 Rezultati", "👤 Po učeniku", "📈 Kvaliteta", "🎓 Ocjene",
      "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
 
 
@@ -1310,6 +1312,71 @@ with tab_rezultati:
     except Exception as _e_ar:                          # noqa: BLE001
         st.caption(f"Analiza trenutno nije dostupna: {_e_ar}")
 
+with tab_pouceniku:
+    upute.prikazi(st, "po_uceniku")
+    st.subheader("Po učeniku")
+    try:
+        _dod_svi = _dodjele()
+        _ucenici_pu = sorted({model.tekst(d.get("ucenik_id")).upper() for d in _dod_svi
+                              if model.tekst(d.get("ucenik_id"))})
+        if not _ucenici_pu:
+            st.info("Nema dodjela. Objavi test u kartici Objavi.")
+        else:
+            _imena_pu = {}
+            for d in _dod_svi:
+                u = model.tekst(d.get("ucenik_id")).upper()
+                if u and model.tekst(d.get("ime_djeteta")):
+                    _imena_pu.setdefault(u, model.tekst(d.get("ime_djeteta")))
+            _odabrani_pu = st.selectbox(
+                "Učenik", _ucenici_pu,
+                format_func=lambda u: (f"{_imena_pu.get(u, '')} ({u})").strip(),
+                key="v2_pu_ucenik")
+
+            _dod_u = [d for d in _dod_svi
+                      if model.tekst(d.get("ucenik_id")).upper() == _odabrani_pu]
+            _did_u = {model.tekst(d.get("dodjela_id")) for d in _dod_u}
+            _pok_u = [p for p in _pokusaji() if model.tekst(p.get("dodjela_id")) in _did_u]
+            _pid_u = {model.tekst(p.get("pokusaj_id")) for p in _pok_u}
+            _ocj_u = [r for r in tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
+                      if model.tekst(r.get("pokusaj_id")) in _pid_u]
+            _def_po_id = {model.tekst(x.get("definicija_id")): x for x in _testovi()}
+            _zadaci_u = []
+            for d in _dod_u:
+                _def = _def_po_id.get(model.tekst(d.get("definicija_id"))) or {}
+                _zadaci_u += definicije.zadaci(_def)
+
+            _t_pu = po_uceniku.testovi_ucenika(_dod_u, _pok_u, _def_po_id)
+            _cj_pu = po_uceniku.cjeline(_zadaci_u, _ocj_u)
+            _bl_pu = po_uceniku.bloom(_zadaci_u, _ocj_u)
+
+            st.markdown("#### Testovi učenika")
+            if _t_pu:
+                st.dataframe(_t_pu, hide_index=True, width="stretch")
+            else:
+                st.caption("Učenik još nema predanih testova.")
+
+            st.markdown("#### Cjeline kroz sve testove — najslabija prva")
+            if _cj_pu:
+                st.dataframe(_cj_pu, hide_index=True, width="stretch",
+                             column_config={"postotak": st.column_config.ProgressColumn(
+                                 "Postotak", min_value=0, max_value=100, format="%d %%")})
+            else:
+                st.caption("Nema ocjena po zadatku za ovog učenika.")
+
+            if _bl_pu:
+                st.markdown("#### Po razinama razmišljanja (Bloom)")
+                st.dataframe(_bl_pu, hide_index=True, width="stretch",
+                             column_config={"postotak": st.column_config.ProgressColumn(
+                                 "Postotak", min_value=0, max_value=100, format="%d %%")})
+
+            st.markdown("#### Sažetak za roditelja (WhatsApp / mail)")
+            _saz = po_uceniku.sazetak_za_roditelja(
+                (f"{_imena_pu.get(_odabrani_pu, '')} ({_odabrani_pu})").strip(),
+                _t_pu, _cj_pu, ime_brenda=model.tekst(brend.PODACI.get("naziv", "CAKI")))
+            st.code(_saz, language=None)
+    except Exception as _e_pu:                              # noqa: BLE001
+        st.caption(f"Kartica Po učeniku trenutno nije dostupna: {_e_pu}")
+
 with tab_kvaliteta:
     upute.prikazi(st, "kvaliteta")
     testovi_k = _testovi()
@@ -1626,6 +1693,16 @@ with tab_postavke:
                             _osvjezi()
                     except Exception as _e_do:          # noqa: BLE001
                         st.error(f"Dopuna ocjena nije uspjela: {_e_do}")
+
+                if st.button("👤 Dopuni imena učenika (iz v1)", key="v2_uvoz_imena"):
+                    try:
+                        _im = uvoz_v1.dopuni_imena(_sheet())
+                        st.success(f"Imena dopunjena: **{_im['dopunjeno']}**, bez imena u v1: "
+                                   f"**{_im['bez_imena']}**.")
+                        if _im["dopunjeno"]:
+                            _osvjezi()
+                    except Exception as _e_im:          # noqa: BLE001
+                        st.error(f"Dopuna imena nije uspjela: {_e_im}")
 
                 if st.button("🧱 Uskladi dodjele s pokušajima (rebuild)",
                              key="v2_uvoz_rebuild"):

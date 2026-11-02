@@ -40,7 +40,8 @@ def redci(zadaci: list[dict], dodjele_: list[dict], pokusaji: list[dict],
         ocjene_p = po_pokusaju.get(pid, {})
 
         red = {
-            "ucenik": model.tekst(d.get("ime_djeteta")) or "—",
+            "ucenik": (model.tekst(d.get("ime_djeteta"))
+                       or model.tekst(d.get("ucenik_id")) or "—"),
             "sifra": model.tekst(d.get("ucenik_id")).upper(),
             "predao": bool(pid),
             "stanja": [],

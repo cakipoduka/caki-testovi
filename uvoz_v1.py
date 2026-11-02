@@ -703,6 +703,49 @@ def rebuild_dodjele(sheet, definicija_id: str) -> dict:
             izlaz["greske"].append(f"dodavanje: {e}")
     return izlaz
 
+def _imena_iz_svih_tabova(sheet) -> dict:
+    """Nađi imena prolaskom kroz sve tabove: redak koji sadrži šifru → najdulja tekstualna ćelija."""
+    import re
+
+    izlaz: dict = {}
+    try:
+        naslovi = [_kao_tekst(getattr(w, "title", "")) for w in sheet.worksheets()]
+    except Exception:                                   # noqa: BLE001
+        return izlaz
+    if not naslovi:
+        return izlaz
+
+    sirovi = {}
+    try:
+        for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
+            uid = model.tekst(d.get("ucenik_id")).upper()
+            if uid and not model.tekst(d.get("ime_djeteta")):
+                sirovi[uid] = True
+    except Exception:                                   # noqa: BLE001
+        return izlaz
+    if not sirovi:
+        return izlaz
+
+    for naslov in naslovi[:30]:                          # ograniči zbog kvote
+        try:
+            redci = tablice.ucitaj(sheet, naslov)
+        except Exception:                               # noqa: BLE001
+            continue
+        for red in redci or []:
+            vrijednosti = [model.tekst(v) for v in (red or {}).values()]
+            for v in vrijednosti:
+                kandidat = v.upper()
+                if kandidat in sirovi:
+                    # ime = najdulja ćelija s barem 4 slova i razmakom (ili 2 riječi)
+                    imena = [x for x in vrijednosti
+                             if sum(z.isalpha() for z in x) >= 4 and len(x) <= 60
+                             and not re.fullmatch(r"[A-Z]{2}\d{4}", x.upper())]
+                    if imena:
+                        izlaz[kandidat] = max(imena, key=len)
+                    break
+    return izlaz
+
+
 def dopuni_imena(sheet) -> dict:
     """Popuni `ime_djeteta` u `Dodjele_ispita` iz v1 `Rezultati_testova` (po `ucenik_id`)."""
     izlaz = {"dopunjeno": 0, "bez_imena": 0}
@@ -712,6 +755,15 @@ def dopuni_imena(sheet) -> dict:
         ime = model.tekst(r.get("ime_djeteta"))
         if uid and ime:
             imena[uid] = ime
+    # 3) krajnja rezerva: prođi SVE tabove i nađi šifru u retku, uzmi ćeliju koja liči na ime
+    if not imena:
+        try:
+            imena = _imena_iz_svih_tabova(sheet)
+            if imena:
+                izlaz["izvor"] = "svi tabovi CRM-a"
+        except Exception:                               # noqa: BLE001
+            imena = {}
+
     if not imena:
         return izlaz
     for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE):

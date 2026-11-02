@@ -97,10 +97,67 @@ def _kao_tekst(v) -> str:
     return "" if v is None else str(v).strip()
 
 
+_CACHE: dict = {}
+CACHE_TTL_S = 30
+
+
+def _retry(funkcija, *args, **kwargs):
+    """Pozovi gspread uz ponavljanje na 429/500/503 (kvota i privremene greške)."""
+    import time
+
+    cekanje = 1.0
+    zadnja = None
+    for pokusaj in range(4):
+        try:
+            return funkcija(*args, **kwargs)
+        except Exception as e:                          # noqa: BLE001
+            zadnja = e
+            poruka = str(e).lower()
+            if not any(x in poruka for x in ("429", "quota", "500", "503", "rate limit")):
+                raise
+            if pokusaj == 3:
+                break
+            time.sleep(cekanje)
+            cekanje *= 2
+    raise zadnja
+
+
+def _zaboravi(sheet, tab: str) -> None:
+    """Baci predmemoriju tog taba nakon upisa."""
+    _CACHE.clear()
+
+
+def _iz_cachea(sheet, tab: str):
+    import time
+
+    zapis = _CACHE.get((id(sheet), tab))
+    if not zapis:
+        return None
+    kada, redci = zapis
+    if time.time() - kada > CACHE_TTL_S:
+        return None
+    return redci
+
+
+def _u_cache(sheet, tab: str, redci: list) -> list:
+    import time
+
+    _CACHE[(id(sheet), tab)] = (time.time(), redci)
+    return redci
+
+
+def _ocisti_cache() -> None:
+    """Pomoćno (testovi i „Osvježi")."""
+    _CACHE.clear()
+
+
 def ucitaj(sheet, tab: str) -> list[dict]:
-    """Svi retci taba kao lista dictova. Nepostojeći tab = prazna lista (ne rušiti stranicu)."""
+    """Svi retci taba kao lista dictova (uz TTL predmemoriju i retry na 429)."""
+    iz_cachea = _iz_cachea(sheet, tab)
+    if iz_cachea is not None:
+        return iz_cachea
     try:
-        ws = sheet.worksheet(tab)
+        ws = _retry(sheet.worksheet, tab)
     except Exception:                                   # noqa: BLE001
         # rezerva: čitaj preko raspona (Worksheet nije dostupan)
         redci = _citaj_rangom(sheet, tab)
@@ -108,13 +165,13 @@ def ucitaj(sheet, tab: str) -> list[dict]:
     try:
         zapisi = [dict(r) for r in ws.get_all_records()]
         if zapisi:
-            return zapisi
+            return _u_cache(sheet, tab, zapisi)
     except Exception:                                   # noqa: BLE001 — prazno zaglavlje / duplikati
         pass
 
     # rezerva: ručno mapiranje (radi i kad `get_all_records()` ne može)
     try:
-        vrijednosti = ws.get_all_values() or []
+        vrijednosti = _retry(ws.get_all_values) or []
     except Exception:                                   # noqa: BLE001
         return []
     if len(vrijednosti) < 2:
@@ -130,7 +187,7 @@ def ucitaj(sheet, tab: str) -> list[dict]:
                 continue
             izlaz.append({ocekivano[i]: (red[i] if i < len(red) else "")
                           for i in range(len(ocekivano))})
-        return izlaz
+        return _u_cache(sheet, tab, izlaz)
 
     zaglavlje = []
     for i, ime in enumerate(vrijednosti[0]):
@@ -475,6 +532,7 @@ def osiguraj_sve(sheet) -> list[str]:
 
 def dodaj(sheet, tab: str, redci: list[dict]) -> int:
     """Doda retke (jedan `append_rows` poziv — kvota). Vrijednosti po zaglavlju taba."""
+    _zaboravi(sheet, tab)
     _provjeri_pisanje()
     if not redci:
         return 0
@@ -502,6 +560,7 @@ def _redak_po_kljucu(ws, kljuc: str, vrijednost: str) -> int | None:
 
 def azuriraj(sheet, tab: str, kljuc: str, vrijednost: str, promjene: dict) -> bool:
     """Izmijeni jedan redak (traži se po `kljuc`). True = pronađen i upisan."""
+    _zaboravi(sheet, tab)
     _provjeri_pisanje()
     ws = osiguraj(sheet, tab)
     redak = _redak_po_kljucu(ws, kljuc, vrijednost)
@@ -517,6 +576,7 @@ def azuriraj(sheet, tab: str, kljuc: str, vrijednost: str, promjene: dict) -> bo
 
 def obrisi(sheet, tab: str, kljuc: str, vrijednost: str) -> bool:
     """Obriše redak po ključu. True = obrisan."""
+    _zaboravi(sheet, tab)
     _provjeri_pisanje()
     ws = osiguraj(sheet, tab)
     redak = _redak_po_kljucu(ws, kljuc, vrijednost)

@@ -1591,6 +1591,19 @@ with tab_postavke:
                     except Exception as _e_do:          # noqa: BLE001
                         st.error(f"Dopuna ocjena nije uspjela: {_e_do}")
 
+                if st.button("🧷 Dijagnostika veza (koji učenici fale)",
+                             key="v2_uvoz_veze"):
+                    try:
+                        _veze = uvoz_v1.dijagnostika_veza(
+                            _sheet(), model.tekst(_nacrt.get("definicija_id")))
+                        if not _veze:
+                            st.success("Svi pokušaji imaju svoju dodjelu — veze su ispravne.")
+                        else:
+                            st.warning(f"Bez dodjele: **{len(_veze)}**")
+                            st.dataframe(_veze, hide_index=True, width="stretch")
+                    except Exception as _e_v:           # noqa: BLE001
+                        st.error(f"Dijagnostika veza nije uspjela: {_e_v}")
+
                 if st.button("🔗 Poveži pokušaje i dodjele po učeniku",
                              key="v2_uvoz_povezi"):
                     try:

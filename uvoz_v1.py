@@ -477,8 +477,11 @@ def rekonstruiraj_dodjele(sheet, definicija_id: str) -> dict:
                 dopuna = {}
                 if not model.tekst(dodjela.get("definicija_id")):
                     dopuna["definicija_id"] = did
-                if not model.tekst(dodjela.get("ucenik_id")):
-                    dopuna["ucenik_id"] = model.tekst(p.get("ucenik_id")).upper()
+                _uc_p = model.tekst(p.get("ucenik_id")).upper()
+                _uc_d = model.tekst(dodjela.get("ucenik_id")).upper()
+                # vlasnik je testni račun ili se ne poklapa → upiši učenika iz pokušaja
+                if _uc_p and _uc_d != _uc_p:
+                    dopuna["ucenik_id"] = _uc_p
                 if not model.tekst(dodjela.get("status")):
                     dopuna["status"] = "predano"
                 if dopuna:
@@ -602,15 +605,20 @@ def povezi_po_uceniku(sheet, definicija_id: str) -> dict:
     po_uceniku = {model.tekst(d.get("ucenik_id")).upper(): model.tekst(d.get("dodjela_id"))
                   for d in dodjele if model.tekst(d.get("ucenik_id"))}
     postojeci_idovi = {model.tekst(d.get("dodjela_id")) for d in dodjele}
+    po_vlasniku = {model.tekst(d.get("dodjela_id")): model.tekst(d.get("ucenik_id"))
+                   for d in dodjele}
 
     for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI):
         if did and model.tekst(p.get("definicija_id")) != did:
             continue
         izlaz["pokusaja"] += 1
         trenutni = model.tekst(p.get("dodjela_id"))
-        if trenutni in postojeci_idovi:
-            continue
         uid = model.tekst(p.get("ucenik_id")).upper()
+        if trenutni in postojeci_idovi:
+            # dodjela postoji — provjeri pripada li ISTOM učeniku (testni računi!)
+            vlasnik = model.tekst(po_vlasniku.get(trenutni, "")).upper()
+            if not uid or vlasnik == uid:
+                continue
         nova = po_uceniku.get(uid)
         if not nova:
             izlaz["bez_dodjele"] += 1
@@ -621,4 +629,26 @@ def povezi_po_uceniku(sheet, definicija_id: str) -> dict:
                 izlaz["povezano"] += 1
         except Exception:                               # noqa: BLE001
             pass
+    return izlaz
+
+def dijagnostika_veza(sheet, definicija_id: str) -> list[dict]:
+    """Vrati pokušaje kojima se `ucenik_id` NE nalazi među dodjelama tog testa.
+
+    Svaki redak: {"pokusaj_id", "ucenik_id", "dodjela_id"} — za ručno mapiranje.
+    """
+    did = model.tekst(definicija_id)
+    dodjele = [d for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE)
+               if not did or model.tekst(d.get("definicija_id")) == did]
+    ucenici = {model.tekst(d.get("ucenik_id")).upper() for d in dodjele
+               if model.tekst(d.get("ucenik_id"))}
+
+    izlaz = []
+    for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI):
+        if did and model.tekst(p.get("definicija_id")) != did:
+            continue
+        uid = model.tekst(p.get("ucenik_id")).upper()
+        if uid and uid not in ucenici:
+            izlaz.append({"pokusaj_id": model.tekst(p.get("pokusaj_id")),
+                          "ucenik_id": uid,
+                          "dodjela_id": model.tekst(p.get("dodjela_id"))})
     return izlaz

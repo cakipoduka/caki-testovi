@@ -831,7 +831,8 @@ def rucno_unesi_imena(sheet, tekst: str) -> dict:
     """
     import re
 
-    izlaz = {"redaka": 0, "dopunjeno": 0, "nepoznato": []}
+    izlaz = {"redaka": 0, "dopunjeno": 0, "nepoznato": [], "greske": [],
+             "pronadeno_u_dodjelama": 0, "primjer": ""}
     parovi = {}
     for linija in model.tekst(tekst).split("\n"):
         linija = linija.strip()
@@ -853,10 +854,14 @@ def rucno_unesi_imena(sheet, tekst: str) -> dict:
     if not parovi:
         return izlaz
 
-    for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
+    dodjele = tablice.ucitaj(sheet, tablice.TAB_DODJELE)
+    if dodjele:
+        izlaz["primjer"] = ", ".join(sorted(dodjele[0].keys())[:6])
+    for d in dodjele:
         uid = model.tekst(d.get("ucenik_id")).upper()
         if uid not in parovi:
             continue
+        izlaz["pronadeno_u_dodjelama"] += 1
         if model.tekst(d.get("ime_djeteta")) == parovi[uid]:
             continue
         try:
@@ -864,8 +869,9 @@ def rucno_unesi_imena(sheet, tekst: str) -> dict:
                                 model.tekst(d.get("dodjela_id")),
                                 {"ime_djeteta": parovi[uid]}):
                 izlaz["dopunjeno"] += 1
-        except Exception:                               # noqa: BLE001
-            pass
+        except Exception as _e:                         # noqa: BLE001
+            if len(izlaz["greske"]) < 3:
+                izlaz["greske"].append(f"{model.tekst(d.get('dodjela_id'))}: {_e}")
     poznati = {model.tekst(d.get("ucenik_id")).upper()
                for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE)}
     izlaz["nepoznato"] = sorted(set(parovi) - poznati)[:10]

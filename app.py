@@ -1702,8 +1702,14 @@ with tab_postavke:
                     if st.button("💾 Upiši imena", key="v2_uvoz_rucno_imena"):
                         try:
                             _ri = uvoz_v1.rucno_unesi_imena(_sheet(), _popis)
-                            st.success(f"Redaka: **{_ri['redaka']}**, upisano "
-                                       f"**{_ri['dopunjeno']}**.")
+                            st.success(
+                                f"Redaka: **{_ri['redaka']}**, nađeno u dodjelama "
+                                f"**{_ri['pronadeno_u_dodjelama']}**, upisano "
+                                f"**{_ri['dopunjeno']}**.")
+                            if _ri.get("primjer"):
+                                st.caption(f"Stupci u dodjelama: {_ri['primjer']}")
+                            for _g in _ri.get("greske") or []:
+                                st.error(f"Upis nije uspio → {_g}")
                             if _ri["nepoznato"]:
                                 st.caption("Nisu u dodjelama: " + ", ".join(_ri["nepoznato"]))
                             if _ri["dopunjeno"]:

@@ -101,6 +101,18 @@ _CACHE: dict = {}
 CACHE_TTL_S = 30
 
 
+_ZADNJA_429 = {"bila": False}
+
+
+def _poruka_429() -> str:
+    """Ako je zadnja greška bila 429, vrati jasnu poruku (inače prazno)."""
+    if _ZADNJA_429["bila"]:
+        _ZADNJA_429["bila"] = False
+        return ("⏳ **Google kvota (429)** — previše čitanja u minuti. "
+                "Pričekaj 60–90 sekundi i pokušaj **jednom**. Ovo nije problem s pravima.")
+    return ""
+
+
 def _retry(funkcija, *args, **kwargs):
     """Pozovi gspread uz ponavljanje na 429/500/503 (kvota i privremene greške)."""
     import time
@@ -115,6 +127,8 @@ def _retry(funkcija, *args, **kwargs):
             poruka = str(e).lower()
             if not any(x in poruka for x in ("429", "quota", "500", "503", "rate limit")):
                 raise
+            if "429" in poruka or "quota" in poruka:
+                _ZADNJA_429["bila"] = True
             if pokusaj == 3:
                 break
             time.sleep(cekanje)
@@ -505,6 +519,7 @@ def osiguraj(sheet, tab: str):
                 except Exception:                       # noqa: BLE001
                     pass
             raise RuntimeError(
+                _poruka_429() or
                 f"Tab `{tab}` postoji, ali ga aplikacija ne može otvoriti. "
                 "Najčešće: servisni račun nema pravo **Editor** na tom Sheetu (ili `CRM_SHEET_ID` "
                 "pokazuje na drugu datoteku). Dodijeli pristup i pokušaj ponovno."
@@ -524,9 +539,14 @@ def osiguraj_sve(sheet) -> list[str]:
         try:
             sheet.worksheet(tab)
         except Exception:                               # noqa: BLE001
-            ws = osiguraj(sheet, tab)
-            ws.update(values=[ZAGLAVLJA[tab]], range_name="A1")
-            napravljeni.append(tab)
+            ws = _ws_ili_none(sheet, tab)
+            if ws is None:
+                continue
+            try:
+                ws.update(values=[ZAGLAVLJA[tab]], range_name="A1")
+                napravljeni.append(tab)
+            except Exception:                           # noqa: BLE001
+                continue
     return napravljeni
 
 
@@ -570,7 +590,7 @@ def azuriraj(sheet, tab: str, kljuc: str, vrijednost: str, promjene: dict) -> bo
     for polje, novo in (promjene or {}).items():
         if polje not in zaglavlje:
             continue
-        ws.update_cell(redak, zaglavlje.index(polje) + 1, novo)
+        _retry(ws.update_cell, redak, zaglavlje.index(polje) + 1, novo)
     return True
 
 

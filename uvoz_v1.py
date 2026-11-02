@@ -454,7 +454,7 @@ def rekonstruiraj_dodjele(sheet, definicija_id: str) -> dict:
     Ne dira postojeće dodjele; ne dira v1. Vraća {"nedostaje", "napravljeno", "postojece"}.
     """
     did = model.tekst(definicija_id)
-    izlaz = {"nedostaje": 0, "napravljeno": 0, "postojece": 0}
+    izlaz = {"nedostaje": 0, "napravljeno": 0, "postojece": 0, "dopunjeno": 0}
     if not did:
         return izlaz
 
@@ -469,6 +469,23 @@ def rekonstruiraj_dodjele(sheet, definicija_id: str) -> dict:
         did_p = model.tekst(p.get("dodjela_id"))
         if did_p and did_p in po_id:
             izlaz["postojece"] += 1
+            # 02.11.2026.: dodjela postoji, ali joj `definicija_id` može biti prazan
+            # (stari retci `D26-0001…0013`) → tada je Rezultati ne prikazuju.
+            try:
+                dodjela = next((d for d in dodjele
+                                if model.tekst(d.get("dodjela_id")) == did_p), {})
+                dopuna = {}
+                if not model.tekst(dodjela.get("definicija_id")):
+                    dopuna["definicija_id"] = did
+                if not model.tekst(dodjela.get("ucenik_id")):
+                    dopuna["ucenik_id"] = model.tekst(p.get("ucenik_id")).upper()
+                if not model.tekst(dodjela.get("status")):
+                    dopuna["status"] = "predano"
+                if dopuna:
+                    tablice.azuriraj(sheet, tablice.TAB_DODJELE, "dodjela_id", did_p, dopuna)
+                    izlaz["dopunjeno"] = izlaz.get("dopunjeno", 0) + 1
+            except Exception:                       # noqa: BLE001
+                pass
             continue
         izlaz["nedostaje"] += 1
         # 01.11.2026.: POKUŠAJ već ima svoj `dodjela_id` — napravi dodjelu s TOČNO tim ID-om

@@ -1160,7 +1160,7 @@ with tab_rezultati:
                     ekran_ucenika.prikazi_pregled_rjesenja(
                         st, zadaci_r, odg,
                         pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True,
-                        sheet=_sheet(), pokusaj=_pok, ucenik_id=model.tekst(_pok.get("ucenik_id")))
+                        sheet=_sheet(), pokusaj=p, ucenik_id=model.tekst(p.get("ucenik_id")))
 
 
     # ---------------------------------------------------------------- ✏️ RUČNA PROVJERA

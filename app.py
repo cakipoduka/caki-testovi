@@ -1697,8 +1697,7 @@ with tab_postavke:
                 if st.button("👤 Dopuni imena učenika (iz v1)", key="v2_uvoz_imena"):
                     try:
                         _im = uvoz_v1.dopuni_imena(_sheet())
-                        st.success(f"Imena dopunjena: **{_im['dopunjeno']}**, bez imena u v1: "
-                                   f"**{_im['bez_imena']}**.")
+                        st.success(f"Imena dopunjena: **{_im['dopunjeno']}** (izvor: {_im.get('izvor') or 'nema'}), bez imena: **{_im['bez_imena']}**.")
                         if _im["dopunjeno"]:
                             _osvjezi()
                     except Exception as _e_im:          # noqa: BLE001

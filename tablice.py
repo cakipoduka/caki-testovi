@@ -364,7 +364,7 @@ def _rang(tab: str, a1: str = "A1") -> str:
 def _citaj_rangom(sheet, tab: str) -> list[dict]:
     """Pročitaj cijeli tab preko raspona (bez Worksheet objekta)."""
     try:
-        vrijednosti = sheet.values_get(_rang(tab, "A:ZZ")).get("values") or []
+        vrijednosti = sheet.values_get(_rang(tab, "A1:Z2000")).get("values") or []
     except Exception:                                   # noqa: BLE001
         return []
     if not vrijednosti:

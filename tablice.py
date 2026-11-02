@@ -106,9 +106,32 @@ def ucitaj(sheet, tab: str) -> list[dict]:
         redci = _citaj_rangom(sheet, tab)
         return redci or []
     try:
-        return [dict(r) for r in ws.get_all_records()]
-    except Exception:                                   # noqa: BLE001 — prazna tablica bez zaglavlja
+        zapisi = [dict(r) for r in ws.get_all_records()]
+        if zapisi:
+            return zapisi
+    except Exception:                                   # noqa: BLE001 — prazno zaglavlje / duplikati
+        pass
+
+    # rezerva: ručno mapiranje (radi i kad `get_all_records()` ne može)
+    try:
+        vrijednosti = ws.get_all_values() or []
+    except Exception:                                   # noqa: BLE001
         return []
+    if len(vrijednosti) < 2:
+        return []
+    zaglavlje = []
+    for i, ime in enumerate(vrijednosti[0]):
+        ime = _kao_tekst(ime) or f"kolona_{i + 1}"
+        while ime in zaglavlje:                         # duplikati imena
+            ime = f"{ime}_{i + 1}"
+        zaglavlje.append(ime)
+    izlaz = []
+    for red in vrijednosti[1:]:
+        if not any(_kao_tekst(v) for v in red):
+            continue
+        izlaz.append({zaglavlje[i]: (red[i] if i < len(red) else "")
+                      for i in range(len(zaglavlje))})
+    return izlaz
 
 
 def _normal_ime(tekst) -> str:

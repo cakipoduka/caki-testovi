@@ -1596,10 +1596,13 @@ with tab_postavke:
                     try:
                         _rk = uvoz_v1.rekonstruiraj_dodjele(
                             _sheet(), _nacrt.get("definicija_id"))
-                        st.success(f"Dodjele: postojeće **{_rk['postojece']}**, "
-                                   f"nedostajalo **{_rk['nedostaje']}**, "
-                                   f"napravljeno **{_rk['napravljeno']}**.")
-                        _osvjezi() if _rk["napravljeno"] else None
+                        st.success(
+                            f"Dodjele: postojeće **{_rk.get('postojece', 0)}**, "
+                            f"dopunjeno **{_rk.get('dopunjeno', 0)}**, "
+                            f"nedostajalo **{_rk.get('nedostaje', 0)}**, "
+                            f"napravljeno **{_rk.get('napravljeno', 0)}**.")
+                        if _rk.get("napravljeno"):
+                            _osvjezi()
                     except Exception as _e_rk:          # noqa: BLE001
                         st.error(f"Rekonstrukcija nije uspjela: {_e_rk}")
 

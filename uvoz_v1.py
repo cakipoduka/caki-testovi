@@ -471,8 +471,10 @@ def rekonstruiraj_dodjele(sheet, definicija_id: str) -> dict:
             izlaz["postojece"] += 1
             continue
         izlaz["nedostaje"] += 1
-        novi = tablice.novi_id(novi_idovi, "D26-")
-        novi_idovi.append(novi)
+        # 01.11.2026.: POKUŠAJ već ima svoj `dodjela_id` — napravi dodjelu s TOČNO tim ID-om
+        novi = did_p or tablice.novi_id(novi_idovi, "D26-")
+        if novi not in novi_idovi:
+            novi_idovi.append(novi)
         nove.append({
             "dodjela_id": novi,
             "definicija_id": did,

@@ -119,6 +119,19 @@ def ucitaj(sheet, tab: str) -> list[dict]:
         return []
     if len(vrijednosti) < 2:
         return []
+    # 01.11.2026.: ako prvi redak NIJE zaglavlje (npr. `Dodjele_ispita` bez zaglavlja), mapiraj
+    # po POZICIJI prema poznatom zaglavlju tog taba.
+    ocekivano = [_kao_tekst(x) for x in (ZAGLAVLJA.get(tab) or [])]
+    prvi = [_kao_tekst(v) for v in vrijednosti[0]]
+    if ocekivano and sum(1 for v in prvi if v in ocekivano) < 2:
+        izlaz = []
+        for red in vrijednosti:                          # svi redci su PODACI
+            if not any(_kao_tekst(v) for v in red):
+                continue
+            izlaz.append({ocekivano[i]: (red[i] if i < len(red) else "")
+                          for i in range(len(ocekivano))})
+        return izlaz
+
     zaglavlje = []
     for i, ime in enumerate(vrijednosti[0]):
         ime = _kao_tekst(ime) or f"kolona_{i + 1}"

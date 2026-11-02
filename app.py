@@ -22,6 +22,7 @@ _KATEGORIJE_INFO = [
 ]
 
 import analitika
+import analiza_rezultata
 import provedba
 import provjera_ocjena
 import posjete
@@ -1273,6 +1274,41 @@ with tab_rezultati:
                         _osvjezi()
     except Exception as _e_pc:                          # noqa: BLE001
         st.caption(f"Provjera trenutno nije dostupna: {_e_pc}")
+
+    # ---------------------------------------------------------------- 📊 ANALIZA (1.1–1.3)
+    try:
+        _zad_ar = definicije.zadaci(d)
+        _ocj_ar = [r for r in tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
+                   if model.tekst(r.get("pokusaj_id")) in
+                   {model.tekst(p.get("pokusaj_id")) for p in pok}]
+        with st.expander("📊 Uspjeh po zadatku (najgori prvi)"):
+            _pz = analiza_rezultata.po_zadatku(_zad_ar, _ocj_ar)
+            if not _pz:
+                st.caption("Nema ocjena po zadatku za ovaj test.")
+            else:
+                st.dataframe(_pz, hide_index=True, width="stretch")
+                st.download_button("⬇ CSV — uspjeh po zadatku",
+                                   analiza_rezultata.csv(_pz),
+                                   file_name=f"uspjeh_zadaci_{_odabir_r}.csv",
+                                   mime="text/csv", key="v2_ar_csv_zad")
+        with st.expander("📚 Uspjeh po cjelinama (najslabija prva)"):
+            _pc = analiza_rezultata.po_cjelinama(_zad_ar, _ocj_ar)
+            if not _pc:
+                st.caption("Nema cjelina za ovaj test.")
+            else:
+                st.dataframe(_pc, hide_index=True, width="stretch")
+                st.download_button("⬇ CSV — uspjeh po cjelinama",
+                                   analiza_rezultata.csv(_pc),
+                                   file_name=f"uspjeh_cjeline_{_odabir_r}.csv",
+                                   mime="text/csv", key="v2_ar_csv_cj")
+        with st.expander("⏳ Započeli, nisu predali"):
+            _zn = analiza_rezultata.zapoceli_nisu_predali(pok, dod)
+            if not _zn:
+                st.success("Svi koji su počeli — predali su.")
+            else:
+                st.dataframe(_zn, hide_index=True, width="stretch")
+    except Exception as _e_ar:                          # noqa: BLE001
+        st.caption(f"Analiza trenutno nije dostupna: {_e_ar}")
 
 with tab_kvaliteta:
     upute.prikazi(st, "kvaliteta")

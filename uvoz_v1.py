@@ -652,3 +652,53 @@ def dijagnostika_veza(sheet, definicija_id: str) -> list[dict]:
                           "ucenik_id": uid,
                           "dodjela_id": model.tekst(p.get("dodjela_id"))})
     return izlaz
+
+def rebuild_dodjele(sheet, definicija_id: str) -> dict:
+    """Uskladi `Dodjele_ispita` s `Pokusaji` (1 pokušaj = 1 dodjela). Idempotentno."""
+    did = model.tekst(definicija_id)
+    izlaz = {"pokusaja": 0, "azurirano": 0, "napravljeno": 0, "greske": []}
+    pokusaji = [p for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
+                if not did or model.tekst(p.get("definicija_id")) == did]
+    postojece = {model.tekst(d.get("dodjela_id")): d
+                 for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE)}
+    novi_idovi = list(postojece)
+    nove = []
+
+    for p in pokusaji:
+        izlaz["pokusaja"] += 1
+        uid = model.tekst(p.get("ucenik_id")).upper()
+        nova_id = model.tekst(p.get("dodjela_id")) or tablice.novi_id(novi_idovi, "D26-")
+        red = {
+            "dodjela_id": nova_id,
+            "definicija_id": model.tekst(p.get("definicija_id")) or did,
+            "ucenik_id": uid,
+            "ime_djeteta": model.tekst(p.get("ime_djeteta")),
+            "grupa": "v1",
+            "rok_od": model.tekst(p.get("pocetak"))[:10],
+            "rok_do": model.tekst(p.get("predaja"))[:10],
+            "varijanta_seed": uid,
+            "status": "predano",
+            "dodijelio": "rebuild",
+            "dodijeljeno": model.sada_iso(),
+        }
+        if nova_id in postojece:
+            promjene = {k: v for k, v in red.items() if k != "dodjela_id"}
+            try:
+                if tablice.azuriraj(sheet, tablice.TAB_DODJELE, "dodjela_id", nova_id, promjene):
+                    izlaz["azurirano"] += 1
+            except Exception as e:                      # noqa: BLE001
+                izlaz["greske"].append(f"{nova_id}: {e}")
+        else:
+            nove.append(red)
+            nove_idovy = None
+            postojece[nova_id] = red
+            if nova_id not in novi_idovi:
+                novi_idovi.append(nova_id)
+
+    if nove:
+        try:
+            tablice.dodaj(sheet, tablice.TAB_DODJELE, nove)
+            izlaz["napravljeno"] = len(nove)
+        except Exception as e:                          # noqa: BLE001
+            izlaz["greske"].append(f"dodavanje: {e}")
+    return izlaz

@@ -1591,6 +1591,20 @@ with tab_postavke:
                     except Exception as _e_do:          # noqa: BLE001
                         st.error(f"Dopuna ocjena nije uspjela: {_e_do}")
 
+                if st.button("🧱 Uskladi dodjele s pokušajima (rebuild)",
+                             key="v2_uvoz_rebuild"):
+                    try:
+                        _rb = uvoz_v1.rebuild_dodjele(
+                            _sheet(), model.tekst(_nacrt.get("definicija_id")))
+                        st.success(f"Pokušaja: **{_rb['pokusaja']}**, ažurirano "
+                                   f"**{_rb['azurirano']}**, napravljeno **{_rb['napravljeno']}**, "
+                                   f"greške: **{len(_rb['greske'])}**")
+                        if _rb["greske"]:
+                            st.dataframe([{"greška": g} for g in _rb["greske"][:10]])
+                        _osvjezi()
+                    except Exception as _e_rb:          # noqa: BLE001
+                        st.error(f"Usklađivanje nije uspjelo: {_e_rb}")
+
                 if st.button("🧷 Dijagnostika veza (koji učenici fale)",
                              key="v2_uvoz_veze"):
                     try:

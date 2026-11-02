@@ -1694,6 +1694,23 @@ with tab_postavke:
                     except Exception as _e_do:          # noqa: BLE001
                         st.error(f"Dopuna ocjena nije uspjela: {_e_do}")
 
+                with st.expander("✍️ Ručni unos imena (zalijepi popis)"):
+                    st.caption("Jedan učenik po retku: `ŠIFRA<TAB>Ime Prezime` "
+                               "ili `ŠIFRA Ime Prezime`.")
+                    _popis = st.text_area("Popis učenika", height=160,
+                                          key="v2_uvoz_popis_imena")
+                    if st.button("💾 Upiši imena", key="v2_uvoz_rucno_imena"):
+                        try:
+                            _ri = uvoz_v1.rucno_unesi_imena(_sheet(), _popis)
+                            st.success(f"Redaka: **{_ri['redaka']}**, upisano "
+                                       f"**{_ri['dopunjeno']}**.")
+                            if _ri["nepoznato"]:
+                                st.caption("Nisu u dodjelama: " + ", ".join(_ri["nepoznato"]))
+                            if _ri["dopunjeno"]:
+                                _osvjezi()
+                        except Exception as _e_ri:      # noqa: BLE001
+                            st.error(f"Upis imena nije uspio: {_e_ri}")
+
                 if st.button("👤 Dopuni imena učenika (iz v1)", key="v2_uvoz_imena"):
                     try:
                         _im = uvoz_v1.dopuni_imena(_sheet())

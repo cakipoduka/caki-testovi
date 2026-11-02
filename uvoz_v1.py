@@ -747,15 +747,53 @@ def _imena_iz_svih_tabova(sheet) -> dict:
 
 
 def dopuni_imena(sheet) -> dict:
-    """Popuni `ime_djeteta` u `Dodjele_ispita` iz v1 `Rezultati_testova` (po `ucenik_id`)."""
-    izlaz = {"dopunjeno": 0, "bez_imena": 0}
-    imena = {}
-    for r in _v1_tablica(sheet, V1_REZ_TAB):
-        uid = model.tekst(r.get("ucenik_id")).upper()
-        ime = model.tekst(r.get("ime_djeteta"))
-        if uid and ime:
-            imena[uid] = ime
-    # 3) krajnja rezerva: prođi SVE tabove i nađi šifru u retku, uzmi ćeliju koja liči na ime
+    """Popuni `ime_djeteta` u `Dodjele_ispita` (tab `Učenici` → CRM → v1 → svi tabovi)."""
+    izlaz = {"dopunjeno": 0, "bez_imena": 0, "izvor": ""}
+    imena: dict = {}
+
+    # 0) tab `Učenici` — tu su imena uz šifre
+    for naslov in ("Učenici", "Ucenici", "UCENICI"):
+        try:
+            redci = tablice.ucitaj(sheet, naslov)
+        except Exception:                               # noqa: BLE001
+            redci = []
+        for r in redci or []:
+            uid = model.tekst(r.get("ucenik_id")).upper()
+            ime = (model.tekst(r.get("ime_djeteta"))
+                   or model.tekst(r.get("ime"))
+                   or model.tekst(r.get("ime_prezime")))
+            if uid and ime:
+                imena[uid] = ime
+        if imena:
+            izlaz["izvor"] = f"tab {naslov}"
+            break
+
+    # 1) CRM baza učenika
+    if not imena:
+        try:
+            import ucenici as _uc
+
+            for u in _uc.svi_ucenici(sheet):
+                uid = model.tekst(u.get("ucenik_id")).upper()
+                ime = model.tekst(u.get("ime")) or model.tekst(u.get("ime_djeteta"))
+                if uid and ime:
+                    imena[uid] = ime
+            if imena:
+                izlaz["izvor"] = "CRM baza učenika"
+        except Exception:                               # noqa: BLE001
+            imena = {}
+
+    # 2) v1 `Rezultati_testova`
+    if not imena:
+        for r in _v1_tablica(sheet, V1_REZ_TAB):
+            uid = model.tekst(r.get("ucenik_id")).upper()
+            ime = model.tekst(r.get("ime_djeteta"))
+            if uid and ime:
+                imena[uid] = ime
+        if imena:
+            izlaz["izvor"] = "v1 Rezultati_testova"
+
+    # 3) svi tabovi CRM-a (traži šifru u retku)
     if not imena:
         try:
             imena = _imena_iz_svih_tabova(sheet)
@@ -766,13 +804,16 @@ def dopuni_imena(sheet) -> dict:
 
     if not imena:
         return izlaz
+
     for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
         uid = model.tekst(d.get("ucenik_id")).upper()
-        if not uid or model.tekst(d.get("ime_djeteta")):
+        if not uid:
             continue
         ime = imena.get(uid)
         if not ime:
             izlaz["bez_imena"] += 1
+            continue
+        if model.tekst(d.get("ime_djeteta")) == ime:
             continue
         try:
             if tablice.azuriraj(sheet, tablice.TAB_DODJELE, "dodjela_id",
@@ -780,4 +821,52 @@ def dopuni_imena(sheet) -> dict:
                 izlaz["dopunjeno"] += 1
         except Exception:                               # noqa: BLE001
             pass
+    return izlaz
+
+
+def rucno_unesi_imena(sheet, tekst: str) -> dict:
+    """Zalijepljeni popis → `ime_djeteta` u `Dodjele_ispita`.
+
+    Prihvaća: `ŠIFRA<TAB>Ime`, `ŠIFRA;Ime`, `ŠIFRA,Ime`, `ŠIFRA Ime Prezime`.
+    """
+    import re
+
+    izlaz = {"redaka": 0, "dopunjeno": 0, "nepoznato": []}
+    parovi = {}
+    for linija in model.tekst(tekst).split("\n"):
+        linija = linija.strip()
+        if not linija:
+            continue
+        dijelovi = re.split(r"[\t;,]|\s{2,}", linija, maxsplit=1)
+        if len(dijelovi) < 2:
+            m = re.match(r"^([A-ZČĆŽŠĐ]{2}\d{3,5})\s+(.+)$", linija, re.I)
+            if not m:
+                continue
+            sifra, ime = m.group(1), m.group(2)
+        else:
+            sifra, ime = dijelovi[0], dijelovi[1]
+        sifra = model.tekst(sifra).upper()
+        ime = model.tekst(ime)
+        if sifra and ime:
+            parovi[sifra] = ime
+    izlaz["redaka"] = len(parovi)
+    if not parovi:
+        return izlaz
+
+    for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
+        uid = model.tekst(d.get("ucenik_id")).upper()
+        if uid not in parovi:
+            continue
+        if model.tekst(d.get("ime_djeteta")) == parovi[uid]:
+            continue
+        try:
+            if tablice.azuriraj(sheet, tablice.TAB_DODJELE, "dodjela_id",
+                                model.tekst(d.get("dodjela_id")),
+                                {"ime_djeteta": parovi[uid]}):
+                izlaz["dopunjeno"] += 1
+        except Exception:                               # noqa: BLE001
+            pass
+    poznati = {model.tekst(d.get("ucenik_id")).upper()
+               for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE)}
+    izlaz["nepoznato"] = sorted(set(parovi) - poznati)[:10]
     return izlaz

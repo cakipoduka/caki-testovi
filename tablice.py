@@ -315,6 +315,47 @@ def _ws_ili_none(sheet, tab: str):
         return None
 
 
+def _azuriraj_rangom(sheet, tab: str, kljuc: str, vrijednost: str,
+                     promjene: dict) -> bool:
+    """Ažuriraj redak preko A1 raspona (bez Worksheet objekta)."""
+    redci = _citaj_rangom(sheet, tab)
+    if not redci:
+        return False
+    kolone = list(redci[0].keys())
+    if kljuc not in kolone:
+        return False
+    cilj = None
+    for i, r in enumerate(redci, start=2):              # 1 = zaglavlje
+        if _kao_tekst(r.get(kljuc)) == _kao_tekst(vrijednost):
+            cilj = i
+            break
+    if cilj is None:                                    # tab bez zaglavlja → podaci od 1. retka
+        for i, r in enumerate(redci, start=1):
+            if _kao_tekst(r.get(kljuc)) == _kao_tekst(vrijednost):
+                cilj = i
+                break
+    if cilj is None:
+        return False
+
+    from gspread.utils import rowcol_to_a1
+
+    ok = False
+    for k, v in (promjene or {}).items():
+        if k not in kolone:
+            continue
+        kol = kolone.index(k) + 1
+        raspon = _rang(tab, rowcol_to_a1(cilj, kol))
+        try:
+            sheet.values_update(raspon, {"valueInputOption": "RAW"},
+                                {"values": [[v]]})
+            ok = True
+        except Exception:                               # noqa: BLE001
+            continue
+    if ok:
+        _zaboravi(sheet, tab)
+    return ok
+
+
 def _rang(tab: str, a1: str = "A1") -> str:
     """A1 raspon s imenom taba u navodnicima (radi i za imena s razmacima)."""
     return "'" + _kao_tekst(tab).replace("'", "''") + "'!" + a1

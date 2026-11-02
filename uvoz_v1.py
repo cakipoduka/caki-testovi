@@ -589,3 +589,36 @@ def dopuni_ocjene(sheet, definicija_id: str) -> dict:
         tablice.dodaj(sheet, tablice.TAB_OCJENE, novi)
         izlaz["ocjena"] = len(novi)
     return izlaz
+
+def povezi_po_uceniku(sheet, definicija_id: str) -> dict:
+    """Poveži pokušaje na dodjele po `ucenik_id` (kad `dodjela_id` ne postoji u tabu).
+
+    Vraća {"pokusaja", "povezano", "bez_dodjele"}.
+    """
+    did = model.tekst(definicija_id)
+    izlaz = {"pokusaja": 0, "povezano": 0, "bez_dodjele": 0}
+    dodjele = [d for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE)
+               if not did or model.tekst(d.get("definicija_id")) == did]
+    po_uceniku = {model.tekst(d.get("ucenik_id")).upper(): model.tekst(d.get("dodjela_id"))
+                  for d in dodjele if model.tekst(d.get("ucenik_id"))}
+    postojeci_idovi = {model.tekst(d.get("dodjela_id")) for d in dodjele}
+
+    for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI):
+        if did and model.tekst(p.get("definicija_id")) != did:
+            continue
+        izlaz["pokusaja"] += 1
+        trenutni = model.tekst(p.get("dodjela_id"))
+        if trenutni in postojeci_idovi:
+            continue
+        uid = model.tekst(p.get("ucenik_id")).upper()
+        nova = po_uceniku.get(uid)
+        if not nova:
+            izlaz["bez_dodjele"] += 1
+            continue
+        try:
+            if tablice.azuriraj(sheet, tablice.TAB_POKUSAJI, "pokusaj_id",
+                                model.tekst(p.get("pokusaj_id")), {"dodjela_id": nova}):
+                izlaz["povezano"] += 1
+        except Exception:                               # noqa: BLE001
+            pass
+    return izlaz

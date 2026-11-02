@@ -1591,6 +1591,18 @@ with tab_postavke:
                     except Exception as _e_do:          # noqa: BLE001
                         st.error(f"Dopuna ocjena nije uspjela: {_e_do}")
 
+                if st.button("🔗 Poveži pokušaje i dodjele po učeniku",
+                             key="v2_uvoz_povezi"):
+                    try:
+                        _pv = uvoz_v1.povezi_po_uceniku(
+                            _sheet(), model.tekst(_nacrt.get("definicija_id")))
+                        st.success(f"Pokušaja: **{_pv['pokusaja']}**, povezano "
+                                   f"**{_pv['povezano']}**, bez dodjele **{_pv['bez_dodjele']}**.")
+                        if _pv["povezano"]:
+                            _osvjezi()
+                    except Exception as _e_pv:          # noqa: BLE001
+                        st.error(f"Povezivanje nije uspjelo: {_e_pv}")
+
                 if st.button("🛠 Rekonstruiraj dodjele iz pokušaja",
                              key="v2_uvoz_rekonstr"):
                     try:

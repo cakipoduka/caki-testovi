@@ -35,7 +35,8 @@ GRUPA_UVOZA = "v1 (uvezeno)"
 def _v1_tablica(sheet, tab: str) -> list[dict]:
     """Retci v1 taba; nepostojeći tab = prazno (uvoz ne smije puknuti zbog toga)."""
     try:
-        return [dict(r) for r in sheet.worksheet(tab).get_all_records()]
+        # 3.11.2026.: ključevi bez razmaka (zaglavlja v1 tabova znaju imati razmake)
+        return tablice._cisti_kljuceve([dict(r) for r in sheet.worksheet(tab).get_all_records()])
     except Exception:                                   # noqa: BLE001 — taba nema / prazan
         return []
 

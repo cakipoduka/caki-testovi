@@ -97,6 +97,22 @@ def _kao_tekst(v) -> str:
     return "" if v is None else str(v).strip()
 
 
+_NEVIDLJIVI = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
+
+
+def ime_stupca(v) -> str:
+    """Ime stupca iz zaglavlja Sheeta, OČIŠĆENO: bez razmaka na rubovima, tvrdih razmaka (NBSP)
+    i nevidljivih znakova (zero-width, BOM).
+
+    3.11.2026. (Claude): zaglavlje `Dodjele_ispita` u živom Sheetu glasi
+    `ucenik_id␣` i `␣ime_djeteta` (razmaci!). `get_all_records()` vraća ključeve TOČNO tako,
+    pa `x.get("ime_djeteta")` daje None → u Rezultatima `—` umjesto imena.
+    Zato se SVA imena stupaca, i kod čitanja i kod pisanja, uspoređuju preko ove funkcije."""
+    if v is None:
+        return ""
+    return str(v).translate(_NEVIDLJIVI).replace("\u00a0", " ").strip()
+
+
 _CACHE: dict = {}
 CACHE_TTL_S = 30
 
@@ -175,11 +191,11 @@ def ucitaj(sheet, tab: str) -> list[dict]:
     except Exception:                                   # noqa: BLE001
         # rezerva: čitaj preko raspona (Worksheet nije dostupan)
         redci = _citaj_rangom(sheet, tab)
-        return redci or []
+        return _cisti_kljuceve(redci or [])
     try:
         zapisi = [dict(r) for r in ws.get_all_records()]
         if zapisi:
-            return _u_cache(sheet, tab, zapisi)
+            return _u_cache(sheet, tab, _cisti_kljuceve(zapisi))
     except Exception:                                   # noqa: BLE001 — prazno zaglavlje / duplikati
         pass
 
@@ -192,8 +208,8 @@ def ucitaj(sheet, tab: str) -> list[dict]:
         return []
     # 01.11.2026.: ako prvi redak NIJE zaglavlje (npr. `Dodjele_ispita` bez zaglavlja), mapiraj
     # po POZICIJI prema poznatom zaglavlju tog taba.
-    ocekivano = [_kao_tekst(x) for x in (ZAGLAVLJA.get(tab) or [])]
-    prvi = [_kao_tekst(v) for v in vrijednosti[0]]
+    ocekivano = [ime_stupca(x) for x in (ZAGLAVLJA.get(tab) or [])]
+    prvi = [ime_stupca(v) for v in vrijednosti[0]]
     if ocekivano and sum(1 for v in prvi if v in ocekivano) < 2:
         izlaz = []
         for red in vrijednosti:                          # svi redci su PODACI
@@ -201,11 +217,11 @@ def ucitaj(sheet, tab: str) -> list[dict]:
                 continue
             izlaz.append({ocekivano[i]: (red[i] if i < len(red) else "")
                           for i in range(len(ocekivano))})
-        return _u_cache(sheet, tab, izlaz)
+        return _u_cache(sheet, tab, _cisti_kljuceve(izlaz))
 
     zaglavlje = []
     for i, ime in enumerate(vrijednosti[0]):
-        ime = _kao_tekst(ime) or f"kolona_{i + 1}"
+        ime = ime_stupca(ime) or f"kolona_{i + 1}"
         while ime in zaglavlje:                         # duplikati imena
             ime = f"{ime}_{i + 1}"
         zaglavlje.append(ime)
@@ -215,6 +231,22 @@ def ucitaj(sheet, tab: str) -> list[dict]:
             continue
         izlaz.append({zaglavlje[i]: (red[i] if i < len(red) else "")
                       for i in range(len(zaglavlje))})
+    return _u_cache(sheet, tab, _cisti_kljuceve(izlaz))
+
+
+def _cisti_kljuceve(redci: list[dict]) -> list[dict]:
+    """Očisti imena stupaca na svim retcima (v. `ime_stupca`). Ako dva stupca nakon čišćenja
+    imaju isto ime, ostaje prva NEPRAZNA vrijednost."""
+    izlaz = []
+    for r in redci or []:
+        novi = {}
+        for k, v in (r or {}).items():
+            kk = ime_stupca(k)
+            if not kk:
+                continue
+            if kk not in novi or (_kao_tekst(novi[kk]) == "" and _kao_tekst(v) != ""):
+                novi[kk] = v
+        izlaz.append(novi)
     return izlaz
 
 
@@ -369,7 +401,7 @@ def _citaj_rangom(sheet, tab: str) -> list[dict]:
         return []
     if not vrijednosti:
         return []
-    zaglavlje = [_kao_tekst(h) for h in vrijednosti[0]]
+    zaglavlje = [ime_stupca(h) for h in vrijednosti[0]]
     redci = []
     for red in vrijednosti[1:]:
         redci.append({zaglavlje[i]: (red[i] if i < len(red) else "")
@@ -382,9 +414,9 @@ def _dodaj_rangom(sheet, tab: str, redci: list[dict], zaglavlje=None) -> int:
     if not redci:
         return 0
     postojece = _citaj_rangom(sheet, tab)
-    kolone = ([_kao_tekst(h) for h in (zaglavlje or [])] or
-              ([_kao_tekst(k) for k in postojece[0]] if postojece else []) or
-              [_kao_tekst(k) for k in redci[0]])
+    kolone = ([ime_stupca(h) for h in (zaglavlje or [])] or
+              ([ime_stupca(k) for k in postojece[0]] if postojece else []) or
+              [ime_stupca(k) for k in redci[0]])
     if not kolone:
         return 0
     tijelo = [[r.get(k, "") for k in kolone] for r in redci]
@@ -464,7 +496,7 @@ def provjeri_zaglavlje(sheet, tab: str, ocekivano=None) -> tuple[bool, str]:
     ocekivano = list(ocekivano or ZAGLAVLJA.get(tab) or [])
     try:
         ws = sheet.worksheet(tab)
-        stvarno = [k for k in (ws.row_values(1) or []) if _kao_tekst(k)]
+        stvarno = [ime_stupca(k) for k in (ws.row_values(1) or []) if ime_stupca(k)]
     except Exception:                                   # noqa: BLE001
         return True, "tab ne postoji — može se napraviti"
     if not stvarno:
@@ -601,7 +633,7 @@ def dodaj(sheet, tab: str, redci: list[dict]) -> int:
     if ws is None:
         # rezerva: piši preko raspona (Worksheet nije dostupan)
         return _dodaj_rangom(sheet, tab, redci, ZAGLAVLJA.get(tab))
-    zaglavlje = [_kao_tekst(h) for h in (ws.row_values(1) or [])] or ZAGLAVLJA[tab]
+    zaglavlje = [ime_stupca(h) for h in (ws.row_values(1) or [])] or ZAGLAVLJA[tab]
     ws.append_rows([[redci_r.get(h, "") for h in zaglavlje] for redci_r in redci],
                    value_input_option="RAW")
     return len(redci)
@@ -609,7 +641,7 @@ def dodaj(sheet, tab: str, redci: list[dict]) -> int:
 
 def _redak_po_kljucu(ws, kljuc: str, vrijednost: str) -> int | None:
     """Broj retka (1-based) gdje stupac `kljuc` ima `vrijednost`. None ako nema."""
-    zaglavlje = [_kao_tekst(h) for h in (ws.row_values(1) or [])]
+    zaglavlje = [ime_stupca(h) for h in (ws.row_values(1) or [])]
     if kljuc not in zaglavlje:
         return None
     i = zaglavlje.index(kljuc)
@@ -627,7 +659,7 @@ def azuriraj(sheet, tab: str, kljuc: str, vrijednost: str, promjene: dict) -> bo
     redak = _redak_po_kljucu(ws, kljuc, vrijednost)
     if not redak:
         return False
-    zaglavlje = [_kao_tekst(h) for h in (ws.row_values(1) or [])]
+    zaglavlje = [ime_stupca(h) for h in (ws.row_values(1) or [])]
     for polje, novo in (promjene or {}).items():
         if polje not in zaglavlje:
             continue

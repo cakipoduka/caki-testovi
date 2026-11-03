@@ -1,0 +1,18 @@
+po_uceniku.py: ima (4902 B)
+analiza_rezultata.py: ima (3893 B)
+uvoz_v1.py: ima (39212 B)
+tablice.py: ima (29087 B)
+app.py: ima (105314 B)
+tablice._cisti_kljuceve: True
+tablice._azuriraj_rangom: True
+tablice.A1:Z2000: True
+tablice._retry: True
+tablice._tab_po_indeksu: True
+app.tab_pouceniku: True
+app.analiza_rezultata: True
+app.po_uceniku: True
+app.import brend: True
+uvoz_v1.rebuild_dodjele: True
+uvoz_v1.dopuni_imena: True
+uvoz_v1.rucno_unesi_imena: True
+uvoz_v1.dijagnostika_veza: True

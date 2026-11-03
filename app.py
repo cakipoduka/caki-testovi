@@ -1091,7 +1091,22 @@ with tab_rezultati:
             st.divider()
             st.markdown("**Pregled rješenja po učeniku**")
             zadaci_r = definicije.zadaci(d)
-            for x in dod:
+            _predani = [x for x in dod if po_dodjeli.get(model.tekst(x.get("dodjela_id")))]
+            if not _predani:
+                st.caption("Nitko još nije predao ovaj test.")
+            _oznake_r = {
+                model.tekst(x.get("dodjela_id")):
+                    (model.tekst(x.get("ime_djeteta")) or model.tekst(x.get("ucenik_id"))
+                     or "—") + " · " + model.tekst(x.get("ucenik_id"))
+                for x in _predani
+            }
+            if _oznake_r:
+                _odabir_pregleda = st.selectbox(
+                    "Odaberi učenika", list(_oznake_r),
+                    format_func=lambda k: _oznake_r[k], key="v2_pregled_ucenik")
+                _predani = [x for x in _predani
+                            if model.tekst(x.get("dodjela_id")) == _odabir_pregleda]
+            for x in _predani:
                 p = po_dodjeli.get(model.tekst(x.get("dodjela_id")))
                 if not p:
                     continue
@@ -1277,6 +1292,46 @@ with tab_rezultati:
     except Exception as _e_pc:                          # noqa: BLE001
         st.caption(f"Provjera trenutno nije dostupna: {_e_pc}")
 
+        # --- C) matrica razreda: učenici × testovi (zadnji rezultat po testu)
+        with st.expander("🧮 Matrica razreda — svi učenici × testovi"):
+            try:
+                _svi_dod = _dodjele()
+                _svi_pok = _pokusaji()
+                _pok_po_dod = {model.tekst(p.get("dodjela_id")): p for p in _svi_pok}
+                _test_po_id = {model.tekst(x.get("definicija_id")): x for x in testovi}
+                _ucenici_mr = {}
+                for _d in _svi_dod:
+                    _u = model.tekst(_d.get("ucenik_id")).upper()
+                    if not _u:
+                        continue
+                    _ime = model.tekst(_d.get("ime_djeteta")) or _u
+                    _ucenici_mr[_u] = _ime
+                _redci_mr = []
+                for _u, _ime in sorted(_ucenici_mr.items(), key=lambda kv: kv[1]):
+                    _red = {"Učenik": _ime, "Šifra": _u}
+                    for _tid, _test in _test_po_id.items():
+                        _naz = model.tekst(_test.get("naziv"))[:18]
+                        _vrijednost = "—"
+                        for _d in _svi_dod:
+                            if (model.tekst(_d.get("ucenik_id")).upper() == _u
+                                    and model.tekst(_d.get("definicija_id")) == _tid):
+                                _p = _pok_po_dod.get(model.tekst(_d.get("dodjela_id")))
+                                if _p:
+                                    _b = model.broj(_p.get("bodovi"), 0)
+                                    _m = model.broj(_p.get("bodovi_max"), 0)
+                                    _vrijednost = f"{int(round(100 * _b / _m))} %" if _m else "—"
+                                else:
+                                    _vrijednost = "⏳"
+                                break
+                        _red[_naz] = _vrijednost
+                    _redci_mr.append(_red)
+                if _redci_mr:
+                    st.dataframe(_redci_mr, hide_index=True, width="stretch")
+                else:
+                    st.caption("Nema podataka za matricu razreda.")
+            except Exception as _e_mr:                  # noqa: BLE001
+                st.caption(f"Matrica razreda trenutno nije dostupna: {_e_mr}")
+
     # ---------------------------------------------------------------- 📊 ANALIZA (1.1–1.3)
     try:
         _zad_ar = definicije.zadaci(d)
@@ -1288,7 +1343,13 @@ with tab_rezultati:
             if not _pz:
                 st.caption("Nema ocjena po zadatku za ovaj test.")
             else:
-                st.dataframe(_pz, hide_index=True, width="stretch")
+                st.dataframe(
+                    _pz, hide_index=True, width="stretch",
+                    column_config={
+                        "postotak": st.column_config.ProgressColumn(
+                            "Uspjeh", min_value=0, max_value=100, format="%d %%"),
+                        "tekst": st.column_config.TextColumn("Zadatak", width="large"),
+                    })
                 st.download_button("⬇ CSV — uspjeh po zadatku",
                                    analiza_rezultata.csv(_pz),
                                    file_name=f"uspjeh_zadaci_{_odabir_r}.csv",

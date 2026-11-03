@@ -991,7 +991,8 @@ if _akt == "📊 Rezultati":
         dod = [x for x in _dodjele() if model.tekst(x.get("definicija_id")) == odabir_r]
         pok = [p for p in _pokusaji() if model.tekst(p.get("definicija_id")) == odabir_r]
 
-        po_dodjeli = {model.tekst(p.get("dodjela_id")): p for p in pok}
+        # 4.11.2026. (Claude): samo PREDANI pokušaji ulaze u bodove i poredak (u tijeku = ⏳)
+        po_dodjeli = {model.tekst(p.get("dodjela_id")): p for p in pok if model.je_predan(p)}
         redci = []
         for x in dod:
             p = po_dodjeli.get(model.tekst(x.get("dodjela_id")))
@@ -1367,7 +1368,8 @@ if _akt == "📊 Rezultati":
                            f"**{_rs['prolazno_postotak']} %**")
 
         with st.expander("↔️ Usporedba dva testa (je li razred napredovao)"):
-            _opcije_v1 = list(_def_po_id_v1)
+            _s_dodjelama = {model.tekst(x.get("definicija_id")) for x in _dod_sve_v1}
+            _opcije_v1 = [i for i in _def_po_id_v1 if i in _s_dodjelama]   # 4.11.: samo testovi s dodjelama
             if len(_opcije_v1) < 2:
                 st.caption("Potrebna su barem dva testa s dodjelama.")
             else:
@@ -1410,9 +1412,8 @@ if _akt == "📊 Rezultati":
     # ---------------------------------------------------------------- 🎯⏱ VAL 2 (15 + 16)
     try:
         _zad_v2 = definicije.zadaci(d)
-        _ocj_v2 = [r for r in tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
-                   if model.tekst(r.get("pokusaj_id")) in
-                   {model.tekst(p.get("pokusaj_id")) for p in pok}]
+        _pid_v2 = {model.tekst(p.get("pokusaj_id")) for p in pok if model.je_predan(p)}   # 4.11.: skup JEDNOM
+        _ocj_v2 = [r for r in _ocjene() if model.tekst(r.get("pokusaj_id")) in _pid_v2]
 
         with st.expander("🎯 Distraktori — koje pogrešne odgovore razred bira"):
             _dis = distraktori.po_zadatku(_zad_v2, _ocj_v2)

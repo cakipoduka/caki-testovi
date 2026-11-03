@@ -73,7 +73,7 @@ def _danas(sada=None):
 
 def moze_podnijeti(sheet, pokusaj: dict, zadatak_id: str, *, sada=None) -> tuple[bool, str]:
     """Smije li se sada podnijeti žalba na taj zadatak? Vraća (smije, razlog)."""
-    if model.tekst((pokusaj or {}).get("status")) not in ("predan", "ocjenjen", "po_isteku"):
+    if not model.je_predan(pokusaj or {}):   # 4.11.: prije nije prihvaćao „predano"
         return False, "Žalba se podnosi nakon predaje testa."
     zid = model.tekst(zadatak_id)
     if not zid:

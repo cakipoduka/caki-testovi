@@ -76,7 +76,7 @@ def zapoceli_nisu_predali(pokusaji: list[dict], dodjele: list[dict]) -> list[dic
              or model.tekst(d.get("ucenik_id")) for d in (dodjele or [])}
     izlaz = []
     for p in pokusaji or []:
-        if model.tekst(p.get("status")).lower() == "predan":
+        if model.je_predan(p):   # 4.11.: prije samo „predan" → predani su bili na popisu
             continue
         izlaz.append({
             "ucenik": imena.get(model.tekst(p.get("dodjela_id")))

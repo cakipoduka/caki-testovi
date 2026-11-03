@@ -364,7 +364,7 @@ def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
     pokusaji = pokusaji_testa(sheet, did)
     if pokusaji:
         predanih = sum(1 for p in pokusaji
-                       if model.tekst(p.get("status")).lower() in ("predan", "predano", "ocjenjen"))
+                       if model.je_predan(p))
         detalj = (f"{predanih} predanih" if predanih else
                   f"{len(pokusaji)} u tijeku")
         return False, (f"Test ima **{len(pokusaji)} pokušaja** ({detalj}) — mijenjanje bi "

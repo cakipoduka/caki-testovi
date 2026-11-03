@@ -7,6 +7,8 @@ najbolji/najslabiji, udio prolaznih (>= 50 %) i tablicu za prikaz.
 """
 from __future__ import annotations
 
+import model
+
 RASPONI = [(0, 20), (20, 40), (40, 60), (60, 80), (80, 101)]
 
 
@@ -22,11 +24,11 @@ def _postotak(bodovi, maks) -> int | None:
 
 def postoci(dodjele, pokusaji) -> list[int]:
     """Postoci svih predanih pokušaja (0–100)."""
-    po_dodjeli = {p.get("dodjela_id"): p for p in pokusaji or []}
+    po_dodjeli = {model.tekst(p.get("dodjela_id")): p for p in pokusaji or []}
     izlaz = []
     for d in dodjele or []:
-        p = po_dodjeli.get(d.get("dodjela_id"))
-        if not p:
+        p = po_dodjeli.get(model.tekst(d.get("dodjela_id")))
+        if not p or not model.je_predan(p):            # 4.11.: samo PREDANI pokušaji
             continue
         post = _postotak(p.get("bodovi"), p.get("bodovi_max"))
         if post is not None:

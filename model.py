@@ -160,3 +160,16 @@ def izmedju(v, od, do) -> bool:
     if do_d and d > do_d:
         return False
     return True
+
+
+# 4.11.2026. (Claude, pregled): JEDNO mjesto koje kaže je li pokušaj predan.
+# provedba.py i uvoz_v1.py upisuju „predano" (ili „po_isteku"), a pojedini moduli su provjeravali
+# „predan" (bez -o) → žalba na normalno predan test je bila odbijena, a „⏳ Započeli, nisu predali"
+# je prikazivao i učenike koji su predali. Stari zapisi („predan", „ocjenjen") i dalje vrijede.
+STATUSI_PREDANI = ("predano", "po_isteku", "ocijenjeno", "predan", "ocjenjen")
+
+
+def je_predan(pokusaj_ili_status) -> bool:
+    """True ako je pokušaj predan (prima redak pokušaja ili sam status)."""
+    st_ = pokusaj_ili_status.get("status") if isinstance(pokusaj_ili_status, dict) else pokusaj_ili_status
+    return tekst(st_).strip().lower() in STATUSI_PREDANI

@@ -8,6 +8,8 @@ bodovima, broj učenika koji su napredovali / nazadovali / isto, te po učeniku 
 """
 from __future__ import annotations
 
+import model
+
 
 def _postotak(bodovi, maks) -> int | None:
     try:
@@ -23,17 +25,17 @@ def _postotak(bodovi, maks) -> int | None:
 def po_uceniku(dodjele_a, pokusaji_a, dodjele_b, pokusaji_b) -> list[dict]:
     """Vrati [{ucenik, sifra, prije, poslije, razlika}] za učenike prisutne na OBA testa."""
     def mapa(dodjele, pokusaji):
-        po_dodjeli = {p.get("dodjela_id"): p for p in pokusaji or []}
+        po_dodjeli = {model.tekst(p.get("dodjela_id")): p for p in pokusaji or []}
         izlaz = {}
         for d in dodjele or []:
-            u = (d.get("ucenik_id") or "").strip().upper()
-            p = po_dodjeli.get(d.get("dodjela_id"))
-            if not u or not p:
+            u = model.tekst(d.get("ucenik_id")).upper()
+            p = po_dodjeli.get(model.tekst(d.get("dodjela_id")))
+            if not u or not p or not model.je_predan(p):   # 4.11.: samo PREDANI pokušaji
                 continue
             post = _postotak(p.get("bodovi"), p.get("bodovi_max"))
             if post is None:
                 continue
-            ime = (d.get("ime_djeteta") or "").strip() or u
+            ime = model.tekst(d.get("ime_djeteta")) or u
             izlaz[u] = {"ime": ime, "postotak": post}
         return izlaz
 

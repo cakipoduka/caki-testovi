@@ -52,9 +52,10 @@ import pdf_izvjestaj
 import radovi
 import uvoz_v1
 import caki_stil as stil  # 31.10.2026.: CAKI tema
+import caki_tema as tema  # noqa: E402  3.11.2026. (Claude, redizajn)
 
 st.set_page_config(page_title="CAKI — Testovi v2", page_icon="🧪", layout="wide")
-stil.primijeni()  # 31.10.2026.: CAKI tema
+tema.primijeni()  # 3.11.2026.: tema kao CRM admin (IBM Plex Sans, plava #1d64b8) + traka kartica
 
 
 # ------------------------------------------------------------------ prijava
@@ -231,6 +232,7 @@ def _grupe():
 
 def _osvjezi():
     st.cache_data.clear()
+    tablice._ocisti_cache()   # 3.11.2026.: i unutarnja predmemorija tablica (30 s) — „Osvježi” čita svježe
     st.rerun()
 
 
@@ -288,8 +290,10 @@ def _info_baze() -> list[str]:
 
 # ------------------------------------------------------------------ zaglavlje
 
-st.title("🧪 Testovi — nova generacija")
-st.caption("Paralelni razvoj: stara aplikacija i dalje radi. Ovdje se gradi sustav po MASTER dokumentu.")
+# 3.11.2026. (Claude, redizajn): zaglavlje kao bijela kartica (isto kao CRM i portali)
+with tema.kutija("tv_zaglavlje"):
+    tema.html_('<div class="kc-pozdrav">CAKI · sustav testiranja v2 (stara aplikacija i dalje radi paralelno)</div>'
+               '<div class="kc-h1">🧪 Testovi</div>')
 
 with st.sidebar:
     st.markdown("### 🧪 CAKI Testovi v2")
@@ -299,14 +303,17 @@ with st.sidebar:
 
     st.divider()
 
-tab_testovi, tab_pdf, tab_objavi, tab_rezultati, tab_pouceniku, tab_kvaliteta, tab_ocjene, tab_ucenik, tab_postavke = st.tabs(
-    ["🧪 Testovi", "🧱 Složi test", "👥 Objavi", "📊 Rezultati", "👤 Po učeniku", "📈 Kvaliteta", "🎓 Ocjene",
-     "🧑‍🎓 Kao učenik", "⚙️ Postavke"])
+# 3.11.2026. (Claude, redizajn + optimizacija): traka kartica od gumba umjesto st.tabs.
+# st.tabs je na SVAKI klik izvršavao svih 9 kartica (čitanje Rezultata, Ocjena, Pokušaja, baze zadataka…),
+# a sada se izvršava samo odabrana → manje čitanja Sheeta (kvota 429) i brži odziv.
+_KARTICE_TV = ["🧪 Testovi", "🧱 Složi test", "👥 Objavi", "📊 Rezultati", "👤 Po učeniku", "📈 Kvaliteta",
+               "🎓 Ocjene", "🧑‍🎓 Kao učenik", "⚙️ Postavke"]
+_akt = tema.nav(_KARTICE_TV, "tv")
 
 
 # ------------------------------------------------------------------ 🧪 Testovi
 
-with tab_testovi:
+if _akt == "🧪 Testovi":
     upute.prikazi(st, "testovi")
     st.caption("Popis testova i radnje. **Novi test slažeš u 🧱 Složi test.**")
 
@@ -408,7 +415,7 @@ with tab_testovi:
             except Exception as _e_u:                   # noqa: BLE001
                 st.caption(f"Uređivanje trenutno nije dostupno: {_e_u}")
 
-with tab_pdf:
+if _akt == "🧱 Složi test":
     upute.prikazi(st, "pdf")
     st.caption("**Jedno mjesto za slaganje testa:** odaberi zadatke iz baze → ispiši **PDF** ili "
                "spremi kao **online test** (isti odabir, dva izlaza).")
@@ -793,7 +800,7 @@ with tab_pdf:
             st.error(f"Kartica PDF-a trenutno ne radi: {_e}")
 
 
-with tab_objavi:
+if _akt == "👥 Objavi":
     upute.prikazi(st, "objavi")
     _testovi_obj = _testovi()
     if not _testovi_obj:
@@ -935,7 +942,7 @@ with tab_objavi:
                     st.caption("· postoji li tab `Dodjele` (⚙️ Postavke → Pripremi tabove)")
                     st.caption("· ima li test definiciju i barem jedan zadatak")
 
-with tab_rezultati:
+if _akt == "📊 Rezultati":
     upute.prikazi(st, "rezultati")
     # ŽALBE NA OCJENU (rok 5 dana) — ispravka ide u Izmjene_ocjena
     with st.expander("Žalbe na ocjenu"):
@@ -1373,7 +1380,7 @@ with tab_rezultati:
     except Exception as _e_ar:                          # noqa: BLE001
         st.caption(f"Analiza trenutno nije dostupna: {_e_ar}")
 
-with tab_pouceniku:
+if _akt == "👤 Po učeniku":
     upute.prikazi(st, "po_uceniku")
     st.subheader("Po učeniku")
     try:
@@ -1438,7 +1445,7 @@ with tab_pouceniku:
     except Exception as _e_pu:                              # noqa: BLE001
         st.caption(f"Kartica Po učeniku trenutno nije dostupna: {_e_pu}")
 
-with tab_kvaliteta:
+if _akt == "📈 Kvaliteta":
     upute.prikazi(st, "kvaliteta")
     testovi_k = _testovi()
     if not testovi_k:
@@ -1508,7 +1515,7 @@ with tab_kvaliteta:
                                     text=f"{dist['opcija'][:40]} — {dist['odabrano']}× {oznaka}")
 
 
-with tab_ocjene:
+if _akt == "🎓 Ocjene":
     upute.prikazi(st, "ocjene")
     testovi_z = _testovi()
     if not testovi_z:
@@ -1555,7 +1562,7 @@ with tab_ocjene:
                                file_name="zakljucne_ocjene.csv", mime="text/csv", key="v2_ocj_csv")
 
 
-with tab_ucenik:
+if _akt == "🧑‍🎓 Kao učenik":
     upute.prikazi(st, "ucenik")
     testovi_u = _testovi()
     if not testovi_u:
@@ -1644,7 +1651,7 @@ with tab_ucenik:
                             st.error(f"Rješavanje se ne može otvoriti: {e}")
 
 
-with tab_postavke:
+if _akt == "⚙️ Postavke":
     upute.prikazi(st, "postavke")
 
     st.subheader("🧪 Samoprovjera (prijašnja rješenja)")

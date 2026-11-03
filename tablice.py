@@ -179,6 +179,23 @@ def _u_cache(sheet, tab: str, redci: list) -> list:
 def _ocisti_cache() -> None:
     """Pomoćno (testovi i „Osvježi")."""
     _CACHE.clear()
+    _WS_CACHE.clear()
+
+
+# 3.11.2026. (Claude, optimizacija): `sheet.worksheet(tab)` u gspreadu SVAKI put čita metapodatke
+# Sheeta (1 zahtjev prema Googleu). Worksheet objekt se ne mijenja, pa se pamti — svako čitanje
+# taba je tako 1 zahtjev umjesto 2 (manje grešaka 429 „kvota").
+_WS_CACHE: dict = {}
+
+
+def _ws_iz_cachea(sheet, tab: str):
+    return _WS_CACHE.get((id(sheet), tab))
+
+
+def _ws_u_cache(sheet, tab: str, ws):
+    if ws is not None:
+        _WS_CACHE[(id(sheet), tab)] = ws
+    return ws
 
 
 def ucitaj(sheet, tab: str) -> list[dict]:
@@ -187,7 +204,7 @@ def ucitaj(sheet, tab: str) -> list[dict]:
     if iz_cachea is not None:
         return iz_cachea
     try:
-        ws = _retry(sheet.worksheet, tab)
+        ws = _ws_iz_cachea(sheet, tab) or _ws_u_cache(sheet, tab, _retry(sheet.worksheet, tab))
     except Exception:                                   # noqa: BLE001
         # rezerva: čitaj preko raspona (Worksheet nije dostupan)
         redci = _citaj_rangom(sheet, tab)
@@ -520,6 +537,15 @@ def osiguraj(sheet, tab: str):
     _provjeri_pisanje()
     zaglavlje = ZAGLAVLJA.get(tab) or ["id"]
 
+    # 3.11.2026.: već otvoren tab — bez novih zahtjeva prema Googleu (kvota)
+    poznat = _ws_iz_cachea(sheet, tab)
+    if poznat is not None:
+        return poznat
+    return _ws_u_cache(sheet, tab, _osiguraj_svjeze(sheet, tab, zaglavlje))
+
+
+def _osiguraj_svjeze(sheet, tab: str, zaglavlje: list):
+    """Stari put `osiguraj` (bez predmemorije) — v. opis u `osiguraj`."""
     # 0) PRISILNO osvježi metapodatke — gspread drži stari popis tabova u memoriji
     try:
         sheet.fetch_sheet_metadata()
@@ -639,13 +665,15 @@ def dodaj(sheet, tab: str, redci: list[dict]) -> int:
     return len(redci)
 
 
-def _redak_po_kljucu(ws, kljuc: str, vrijednost: str) -> int | None:
-    """Broj retka (1-based) gdje stupac `kljuc` ima `vrijednost`. None ako nema."""
-    zaglavlje = [ime_stupca(h) for h in (ws.row_values(1) or [])]
+def _redak_po_kljucu(ws, kljuc: str, vrijednost: str, vrijednosti=None) -> int | None:
+    """Broj retka (1-based) gdje stupac `kljuc` ima `vrijednost`. None ako nema.
+    3.11.2026.: jedno čitanje taba (zaglavlje je prvi redak istog čitanja)."""
+    vrijednosti = vrijednosti if vrijednosti is not None else (_retry(ws.get_all_values) or [])
+    zaglavlje = [ime_stupca(h) for h in (vrijednosti[0] if vrijednosti else [])]
     if kljuc not in zaglavlje:
         return None
     i = zaglavlje.index(kljuc)
-    for br, red in enumerate(ws.get_all_values()[1:], start=2):
+    for br, red in enumerate(vrijednosti[1:], start=2):
         if i < len(red) and _kao_tekst(red[i]) == _kao_tekst(vrijednost):
             return br
     return None
@@ -656,10 +684,11 @@ def azuriraj(sheet, tab: str, kljuc: str, vrijednost: str, promjene: dict) -> bo
     _zaboravi(sheet, tab)
     _provjeri_pisanje()
     ws = osiguraj(sheet, tab)
-    redak = _redak_po_kljucu(ws, kljuc, vrijednost)
+    vrijednosti = _retry(ws.get_all_values) or []      # 3.11.: jedno čitanje umjesto tri
+    redak = _redak_po_kljucu(ws, kljuc, vrijednost, vrijednosti)
     if not redak:
         return False
-    zaglavlje = [ime_stupca(h) for h in (ws.row_values(1) or [])]
+    zaglavlje = [ime_stupca(h) for h in vrijednosti[0]]
     for polje, novo in (promjene or {}).items():
         if polje not in zaglavlje:
             continue

@@ -27,11 +27,13 @@ import provedba
 import provjera_ocjena
 import posjete
 import po_uceniku
+import raspodjela
 import podsjetnik
 import banka
 import brend
 import builder
 import definicije
+import distraktori
 import dodjele
 import ekran_ucenika
 import grupe
@@ -50,6 +52,8 @@ from veza import sheet_baze, sheet_crm
 import predlosci
 import pdf_izvjestaj
 import radovi
+import usporedba
+import vrijeme
 import uvoz_v1
 import caki_stil as stil  # 31.10.2026.: CAKI tema
 import caki_tema as tema  # noqa: E402  3.11.2026. (Claude, redizajn)
@@ -1338,6 +1342,115 @@ if _akt == "📊 Rezultati":
                     st.caption("Nema podataka za matricu razreda.")
             except Exception as _e_mr:                  # noqa: BLE001
                 st.caption(f"Matrica razreda trenutno nije dostupna: {_e_mr}")
+
+    # ---------------------------------------------------------------- ↔️📊 VAL 1 (13 + 14)
+    try:
+        _dod_sve_v1 = _dodjele()
+        _pok_sve_v1 = _pokusaji()
+        _def_po_id_v1 = {model.tekst(x.get("definicija_id")): x for x in _testovi()}
+
+        with st.expander("📊 Raspodjela bodova (prosjek, medijan, prolaznost)"):
+            _post_v1 = raspodjela.postoci(dod, pok)
+            if not _post_v1:
+                st.caption("Nema predanih pokušaja za ovaj test.")
+            else:
+                _rs = raspodjela.sazetak(_post_v1)
+                _k1, _k2, _k3, _k4 = st.columns(4)
+                _k1.metric("Prosjek", f"{_rs['prosjek']} %")
+                _k2.metric("Medijan", f"{_rs['medijan']} %")
+                _k3.metric("Raspon P25–P75", f"{_rs['p25']}–{_rs['p75']} %")
+                _k4.metric("Prolazno (≥ 50 %)", f"{_rs['prolazno']}/{_rs['ucenika']}")
+                _hist = raspodjela.histogram(_post_v1)
+                st.bar_chart({h["raspon"]: h["ucenika"] for h in _hist})
+                st.caption(f"Najslabiji **{_rs['najslabiji']} %** · najbolji "
+                           f"**{_rs['najbolji']} %** · prolaznost "
+                           f"**{_rs['prolazno_postotak']} %**")
+
+        with st.expander("↔️ Usporedba dva testa (je li razred napredovao)"):
+            _opcije_v1 = list(_def_po_id_v1)
+            if len(_opcije_v1) < 2:
+                st.caption("Potrebna su barem dva testa s dodjelama.")
+            else:
+                _ca, _cb = st.columns(2)
+                _ta = _ca.selectbox("Prvi test (prije)", _opcije_v1, key="v2_usp_a",
+                                    format_func=lambda i: model.tekst(
+                                        _def_po_id_v1[i].get("naziv")))
+                _tb = _cb.selectbox("Drugi test (poslije)", _opcije_v1,
+                                    index=min(1, len(_opcije_v1) - 1), key="v2_usp_b",
+                                    format_func=lambda i: model.tekst(
+                                        _def_po_id_v1[i].get("naziv")))
+                if _ta == _tb:
+                    st.info("Odaberi dva različita testa.")
+                else:
+                    _da = [x for x in _dod_sve_v1
+                           if model.tekst(x.get("definicija_id")) == _ta]
+                    _db = [x for x in _dod_sve_v1
+                           if model.tekst(x.get("definicija_id")) == _tb]
+                    _pa = [x for x in _pok_sve_v1
+                           if model.tekst(x.get("definicija_id")) == _ta]
+                    _pb = [x for x in _pok_sve_v1
+                           if model.tekst(x.get("definicija_id")) == _tb]
+                    _redci_v1 = usporedba.po_uceniku(_da, _pa, _db, _pb)
+                    _sa = usporedba.sazetak(_redci_v1)
+                    if not _redci_v1:
+                        st.caption("Nema učenika koji su pisali OBA testa.")
+                    else:
+                        _m1, _m2, _m3, _m4 = st.columns(4)
+                        _m1.metric("Učenika", _sa["ucenika"])
+                        _m2.metric("Prije", f"{_sa['prije']} %")
+                        _m3.metric("Poslije", f"{_sa['poslije']} %",
+                                   delta=f"{_sa['razlika']:+d} %")
+                        _m4.metric("Napredovalo", _sa["napredovalo"])
+                        st.dataframe(_redci_v1, hide_index=True, width="stretch")
+                        st.caption(f"Nazadovalo **{_sa['nazadovalo']}**, isto "
+                                   f"**{_sa['isto']}**.")
+    except Exception as _e_v1:                              # noqa: BLE001
+        st.caption(f"Usporedba/raspodjela trenutno nije dostupna: {_e_v1}")
+
+    # ---------------------------------------------------------------- 🎯⏱ VAL 2 (15 + 16)
+    try:
+        _zad_v2 = definicije.zadaci(d)
+        _ocj_v2 = [r for r in tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
+                   if model.tekst(r.get("pokusaj_id")) in
+                   {model.tekst(p.get("pokusaj_id")) for p in pok}]
+
+        with st.expander("🎯 Distraktori — koje pogrešne odgovore razred bira"):
+            _dis = distraktori.po_zadatku(_zad_v2, _ocj_v2)
+            if not _dis:
+                st.caption("Nema zadataka s ponuđenim odgovorima ili ocjena za ovaj test.")
+            else:
+                _sd = distraktori.sazetak(_dis)
+                st.caption(f"Zadataka s ponuđenim odgovorima: **{_sd['zadataka']}** · "
+                           f"jak mamac (≥ 50 % pogrešnih na jednom odgovoru): "
+                           f"**{_sd['jak_mamac']}**")
+                st.dataframe(
+                    [{k: r[k] for k in ("redni", "zadatak_id", "tekst", "tocno",
+                                        "pogresnih", "bez_odgovora", "najcesci")}
+                     for r in _dis],
+                    hide_index=True, width="stretch")
+                st.caption("Lijevo je točan odgovor, desno najčešći pogrešni "
+                           "(npr. `C (7×)`). Ako jedan pogrešni dominira — ponuda je "
+                           "vjerojatno zbunjujuća ili je taj odgovor logična zamka.")
+
+        with st.expander("⏱ Vremenska analiza (trajanje po učeniku i zadatku)"):
+            _vs = vrijeme.sazetak(pok, dod, _zad_v2, _ocj_v2)
+            if not _vs["ucenika"]:
+                st.caption("Nema zabilježenog trajanja pokušaja.")
+            else:
+                _v1c, _v2c, _v3c = st.columns(3)
+                _v1c.metric("Prosječno trajanje", f"{_vs['prosjek_min']} min")
+                _v2c.metric("Najdulje", f"{_vs['najdulje_min']} min")
+                _v3c.metric("Najkraće", f"{_vs['najkrace_min']} min")
+                st.dataframe(vrijeme.po_uceniku(pok, dod), hide_index=True, width="stretch")
+                if _vs["ima_vrijeme_zadatka"]:
+                    st.markdown("**Najsporiji zadaci**")
+                    st.dataframe(vrijeme.po_zadatku(_zad_v2, _ocj_v2),
+                                 hide_index=True, width="stretch")
+                else:
+                    st.caption("Vrijeme po zadatku još nije dostupno za ovaj test "
+                               "(u v1 se nije mjerilo). Radit će za nove testove.")
+    except Exception as _e_v2:                              # noqa: BLE001
+        st.caption(f"Distraktori/vrijeme trenutno nisu dostupni: {_e_v2}")
 
     # ---------------------------------------------------------------- 📊 ANALIZA (1.1–1.3)
     try:

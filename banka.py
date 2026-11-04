@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re as _re
 
+import re
 import model
 import tablice
 
@@ -400,13 +401,26 @@ def postavi_video(sheet, zadatak_id: str, url: str, naslov: str = "") -> tuple[b
 
 # ------------------------------------------------------------------ prikaz opcija
 # PREUZETO iz `caki-baza-zadataka/baza_zadataka_pipeline.py` (isti prikaz kao u bazi).
+# 05.11.2026. (Claudeov nalaz iz TRACKER-a, primijenio DeepSeek): prije brojanja slova BRIŠU
+# se LaTeX naredbe (`\rangle`, `\cap`, `\langle`…). Bez toga `[-1,1\rangle \cap\langle 3,5]`
+# ima 15 „slova" naspram 14 ostalih znakova → heuristika ga proglasi rečenicom i opcija se
+# prikaže doslovno, bez renderiranja.
+_LATEX_NAREDBA_RE = re.compile(r"\\[a-zA-Z]+")
+
+
 def _izgleda_kao_recenica(raw):
     """Heuristika: ako sadrži razmak I ima više slova nego brojeva/simbola, vjerojatno je
-    obična rečenica (npr. 'ne može se odrediti'), a ne matematički izraz."""
-    if " " not in raw:
+    obična rečenica (npr. 'ne može se odrediti'), a ne matematički izraz.
+
+    LaTeX naredbe se prije brojanja uklanjaju — one nisu riječi. Prava rečenica s pokojom
+    naredbom („ne postoji \\infty rješenje") i dalje ostaje rečenica.
+    """
+    tekst = model.tekst(raw)
+    if " " not in tekst:
         return False
-    slova = sum(c.isalpha() for c in raw)
-    ostalo = len(raw) - slova
+    bez_naredbi = _LATEX_NAREDBA_RE.sub("", tekst)
+    slova = sum(c.isalpha() for c in bez_naredbi)
+    ostalo = len(bez_naredbi) - slova
     return slova > ostalo
 
 SLOVA_PONUDJENIH_ODGOVORA = ["A", "B", "C", "D", "E", "F", "G", "H"]

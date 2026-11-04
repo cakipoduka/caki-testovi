@@ -240,7 +240,7 @@ def prikazi(st, sheet, definicija: dict, dodjela: dict, *, dry: bool = False) ->
     with st.expander("👀 Provjeri odgovore prije predaje (koji su odgovoreni, koji nisu)"):
         for red in rjesavanje.sazetak_predaje(zadaci, st.session_state[k_odg]):
             st.caption(red)
-    if st.button("📤 POŠALJI ODGOVORE", type="primary", use_container_width=True,
+    if st.button("📤 POŠALJI ODGOVORE", type="primary", width="stretch",
                  key=_k("predaj", pokusaj["pokusaj_id"])):
         try:
             if dry:
@@ -413,9 +413,9 @@ def _posalji_slike(st, sheet, definicija: dict, dodjela: dict, pokusaj: dict, uc
 
     b1, b2 = st.columns([3, 2])
     posalji = b1.button("📤 POŠALJI SLIKE POSTUPKA", type="primary",
-                        use_container_width=True, disabled=not datoteke,
+                        width="stretch", disabled=not datoteke,
                         key=_k("pos_slike", did))
-    nema = b2.button("NEMA POSTUPKA (nemam što poslati)", use_container_width=True,
+    nema = b2.button("NEMA POSTUPKA (nemam što poslati)", width="stretch",
                      disabled=not dopusti_nema, key=_k("nema", did))
 
     if posalji:

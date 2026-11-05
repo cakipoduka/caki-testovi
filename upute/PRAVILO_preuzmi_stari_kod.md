@@ -45,17 +45,28 @@ novog koda koji radi**.
 | analitika (p, r, α) | stari ima `ocjenjivanje_pretpregled.py` (9 KB) | **provjeriti** — možda ima dio statistike |
 | PDF izvještaj (reportlab) | stari **nema** izvještaj za roditelje | ne |
 
-## Kandidati za sljedeće preuzimanje (po vrijednosti)
+## Kandidati za sljedeće preuzimanje (po vrijednosti) — ažurirano 05.11.2026. (Claude)
 
-| # | Stari modul | Što bi riješio u v2 | Trud |
-|---|---|---|---|
-| 1 | `pages/15_radovi.py` + `radovi.py` (portal, 12 KB) | 📷 radovi — pregled, potvrda, prikaz | mali |
-| 2 | `ocjenjivanje_pretpregled.py` | 📈 statistika zadatka (usporediti s `analitika.py`, uzeti bolje) | mali |
-| 3 | `test_biblioteka_izvora.py` + `filtriraj_zadatke_za_skriptu.py` | filtri po **biblioteci izvora** | mali |
-| 4 | `testovi_online.py` (portal, 53 KB) | logika rješavanja (prekid, nastavak, istek) — usporediti s `provedba.py` | srednji |
-| 5 | `skupine_zadataka.py` (18 KB) | skupine zadataka (a), (b), (c) — v2 ih još ne podržava | srednji |
-| 6 | `formule.py` (11 KB) | formule/LaTeX pomoć u editoru | mali |
-| 7 | `predmet_config.py` | zaglavlje PDF-a po predmetu (`MATEMATIKA`, `FIZIKA`…) — sada je fiksno | mali |
+**Provjereno uživo u kodu (ne samo po sjećanju) — status stupac je novi, prijašnja tablica je bila
+zastarjela: #1, #3 i #5 su već odavno gotovi, samo nitko nije ovdje prekrižio.**
+
+| # | Stari modul | Što bi riješio u v2 | Trud | Status (05.11.) |
+|---|---|---|---|---|
+| 1 | `pages/15_radovi.py` + `radovi.py` (portal, 12 KB) | 📷 radovi — pregled, potvrda, prikaz | mali | ✅ **Gotovo** — `radovi.py` postoji, uvezen i korišten u `app.py` i `pages/1_Ucenik.py` |
+| 2 | `ocjenjivanje_pretpregled.py` | 📈 statistika zadatka (usporediti s `analitika.py`, uzeti bolje) | mali | ⚠️ **Vjerojatno nadiđeno** — v2 ima `statistika.py`+`analitika.py`+`analiza_rezultata.py` (698 redaka nasuprot 166 u v1); nije provjereno pokriva li baš SVE što je stari modul pokazivao, ali po opsegu je veći. Nije hitno. |
+| 3 | `test_biblioteka_izvora.py` + `filtriraj_zadatke_za_skriptu.py` | filtri po **biblioteci izvora** | mali | ✅ **Gotovo** — `builder.filtriraj()` ima `izvor=`/`potpoglavlje=`, UI u `app.py` L442 (`st.multiselect("Biblioteka izvora", …)`). Docstring u `builder.py` je zastario (još piše „nedostaju" — ispraviti) |
+| 4 | `testovi_online.py` (portal, 53 KB) | logika rješavanja (prekid, nastavak, istek) — usporediti s `provedba.py` | srednji | 🟡 **Otvoreno, nije hitno** — v2 ima vlastiti `provedba.py`/`ekran_ucenika.py` (autosave, nastavak); usporedba red-po-red nije rađena, moguće da postoje sitni UX detalji vrijedni preuzimanja (npr. server-side rok koji preživi F5 — provjeriti ima li v2 to) |
+| 5 | `skupine_zadataka.py` (18 KB) | skupine zadataka (a), (b), (c) — v2 ih još ne podržava | srednji | ✅ **Gotovo** — `skupine.py` eksplicitno kaže „preuzeto doslovno", uvezen u `banka.py` i `tex_test.py` |
+| 6 | `formule.py` (11 KB) | formule/LaTeX pomoć u editoru | mali | ❌ **Još nema** — nema `formule.py` ni ekvivalenta `pages/14_formule.py` u v2. Zadano DeepSeeku: `ZADACI/ZADATAK_06_brisanje_rok_formule.md` §3 |
+| 7 | `predmet_config.py` | zaglavlje PDF-a po predmetu (`MATEMATIKA`, `FIZIKA`…) — sada je fiksno | mali | ❌ **Još nema** — `tex_test.py` ima `predmet_zaglavlje: str = "MATEMATIKA"` kao TVRDI default, nitko ga nigdje u `app.py`/`pages/1_Ucenik.py` ne postavlja na nešto drugo. Svaki v2 test (čak i fizika, ako ikad bude) dobije "MATEMATIKA" na PDF-u. Nije u ZADATAK_06 — dodati u sljedeći zadatak prije nego v2 preuzme i druge predmete. |
+
+## Novi nalazi (05.11.2026., Claude) — nisu bili na staroj listi
+
+| Što | Gdje | Trud |
+|---|---|---|
+| Brisanje testa iz UI-a (`definicije.obrisi()` postoji, ali se nigdje ne zove) | `app.py` | mali — ZADATAK_06 §1 |
+| Rok (`rok_od`/`rok_do`) ne provjerava je li već prošao prije objave/izmjene | `app.py` L361–365, L744–752 | mali — ZADATAK_06 §2 |
+| **HITNO:** "Zadaj pojedinom učeniku" zna upisati krivi/prazan `ucenik_id` (dokazano na živom Sheetu, slučaj OH3229) | `app.py` (Objavi, Pojedini učenici) | nepoznato dok se ne reproducira — ZADATAK_06 §0 |
 
 ## Pravilo za buduće izvještaje
 

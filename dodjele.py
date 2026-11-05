@@ -285,3 +285,77 @@ def premjesti_iz_crm_taba(sheet) -> dict:
                       [{k: model.tekst(r.get(k)) for k in zaglavlje} for r in novi])
         izlaz["premjesteno"] = len(novi)
     return izlaz
+
+# ---------------------------------------------------------------- čišćenje (zadatak 06)
+def obrisi_dodjelu(sheet, dodjela_id: str, *, sila: bool = False) -> dict:
+    """Obriši jednu dodjelu. Bez `sila` odbija ako za nju postoji pokušaj."""
+    did = model.tekst(dodjela_id)
+    izlaz = {"obrisano": False, "razlog": ""}
+    if not did:
+        izlaz["razlog"] = "Nedostaje dodjela_id."
+        return izlaz
+
+    pokusaji = [p for p in tablice.ucitaj(sheet, tablice.TAB_POKUSAJI)
+                if model.tekst(p.get("dodjela_id")) == did]
+    if pokusaji and not sila:
+        izlaz["razlog"] = (f"Dodjela {did} ima {len(pokusaji)} pokušaj(a) — brisanje bi "
+                           "izgubilo rezultat. Obriši pokušaje ili potvrdi silu.")
+        return izlaz
+
+    try:
+        ok = tablice.obrisi(sheet, tablice.TAB_DODJELE, "dodjela_id", did)
+    except Exception as e:                              # noqa: BLE001
+        izlaz["razlog"] = f"Brisanje nije uspjelo: {e}"
+        return izlaz
+    izlaz["obrisano"] = bool(ok)
+    if not ok:
+        izlaz["razlog"] = f"Dodjela {did} nije nađena."
+    return izlaz
+
+
+def pocisti_neispravne(sheet, poznati_ucenici) -> dict:
+    """Obriši dodjele čija šifra ne postoji u popisu učenika (prazno / prekratko / nepoznato).
+
+    `poznati_ucenici` = skup/map šifri koje stvarno postoje (CRM `Učenici`).
+    Vraća {"obrisano": n, "popis": [{dodjela_id, ucenik_id, definicija_id}], "preskoceno": n}.
+    """
+    poznati = {model.tekst(u).upper() for u in (poznati_ucenici or []) if model.tekst(u)}
+    izlaz = {"obrisano": 0, "popis": [], "preskoceno": 0}
+    if not poznati:
+        return izlaz
+
+    for d in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
+        uid = model.tekst(d.get("ucenik_id")).upper()
+        if uid and uid in poznati:
+            continue
+        did = model.tekst(d.get("dodjela_id"))
+        rez = obrisi_dodjelu(sheet, did)
+        if rez["obrisano"]:
+            izlaz["obrisano"] += 1
+            izlaz["popis"].append({"dodjela_id": did, "ucenik_id": uid,
+                                   "definicija_id": model.tekst(d.get("definicija_id"))})
+        else:
+            izlaz["preskoceno"] += 1
+    return izlaz
+
+def provjeri_sifre(poznati_ucenici, unesene_sifre) -> dict:
+    """Podijeli ručno upisane šifre na poznate (postoje u CRM `Učenici`) i nepoznate.
+
+    §0 (zadatak 06): `OH` je nekad tiho prolazio i postao dodjela bez učenika. Sada se nepoznate
+    šifre vraćaju odvojeno i objava se blokira dok se ne isprave.
+
+    Vraća {"poznate": [...], "nepoznate": [...], "prazno": bool}.
+    """
+    poznati = {model.tekst(u).upper() for u in (poznati_ucenici or []) if model.tekst(u)}
+    izlaz = {"poznate": [], "nepoznate": [], "prazno": not poznati}
+    videno = set()
+    for s in unesene_sifre or []:
+        sifra = model.tekst(s).upper()
+        if not sifra or sifra in videno:
+            continue
+        videno.add(sifra)
+        if not poznati or sifra in poznati:
+            izlaz["poznate"].append(sifra)
+        else:
+            izlaz["nepoznate"].append(sifra)
+    return izlaz

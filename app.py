@@ -146,6 +146,13 @@ if _nedostaje:
 # ------------------------------------------------------------------ podaci
 
 @st.cache_resource(show_spinner=False)
+def _datum_danas():
+    """Današnji datum (za provjeru rokova)."""
+    import datetime
+
+    return datetime.date.today()
+
+
 def _sheet():
     return sheet_crm()
 
@@ -201,6 +208,19 @@ def _testovi():
 
 
 @st.cache_data(ttl=60, show_spinner=False)
+def _svi_ucenici_map() -> dict:
+    """Mapa šifra → ime za SVE učenike (CRM Učenici + Upisi + Matura)."""
+    izlaz = {}
+    try:
+        for u in ucenici.svi_ucenici(_sheet(), sheet_crm()):
+            uid = model.tekst(u.get("ucenik_id")).upper()
+            if uid:
+                izlaz[uid] = model.tekst(u.get("ime")) or model.tekst(u.get("ime_djeteta"))
+    except Exception:                                   # noqa: BLE001
+        return {}
+    return izlaz
+
+
 def _dodjele():
     try:
         return tablice.ucitaj(_sheet(), tablice.TAB_DODJELE)
@@ -743,13 +763,19 @@ if _akt == "🧱 Složi test":
                 _d1, _d2 = st.columns(2)
                 _rok_od = _d1.date_input("Rok od (test nije dostupan prije)", key="v2p_rok_od")
                 _rok_do = _d2.date_input("Rok do (test nije dostupan poslije)", key="v2p_rok_do")
+                # §2 (zadatak 06): rok koji je već prošao = „mrtva" objava (učenik je nikad ne vidi)
+                _rok_prosao = _rok_do < _datum_danas()
                 if _rok_do < _rok_od:
                     st.error("Rok „do” ne može biti prije roka „od”.")
+                elif _rok_prosao:
+                    st.error("**Rok je već prošao** — učenik ovaj test ne bi vidio. "
+                             "Postavi datum u budućnost.")
                 else:
                     st.caption(f"Učenik može pisati **{model.datum_hr(_rok_od)}** – "
                                f"**{model.datum_hr(_rok_do)}**; izvan toga test nije dostupan.")
                 if st.button("💾 Spremi kao online test (nacrt)", type="primary",
-                             disabled=(bool(_greska_naslov) or not _lista or _rok_do < _rok_od),
+                             disabled=(bool(_greska_naslov) or not _lista or _rok_do < _rok_od
+                      or _rok_do < _datum_danas()),
                              key="v2p_spremi"):
                     try:
                         _novi_id = tablice.novi_id(
@@ -804,6 +830,22 @@ if _akt == "🧱 Složi test":
             st.error(f"Kartica PDF-a trenutno ne radi: {_e}")
 
 
+            st.divider()
+            with st.expander("🗑️ Obriši test (trajno)"):
+                st.caption("Briše se **samo test bez predanih pokušaja**. Ako učenici već imaju "
+                           "pokušaje, test se ne može obrisati — predlaže se arhiviranje "
+                           "(rezultati ostaju).")
+                _potvrda_bris = st.checkbox(
+                    "Potvrđujem da želim obrisati ovaj test", key=f"v2_bris_potv_{_odabir_l}")
+                if st.button("🗑️ Obriši test", type="primary",
+                             disabled=not _potvrda_bris, key=f"v2_bris_gumb_{_odabir_l}"):
+                    _ok_b, _raz_b = definicije.obrisi(_sheet(), _odabir_l, korisnik="caki")
+                    if _ok_b:
+                        st.success(_raz_b)
+                        _osvjezi()
+                    else:
+                        st.warning(_raz_b)
+
 if _akt == "👥 Objavi":
     upute.prikazi(st, "objavi")
     _testovi_obj = _testovi()
@@ -815,6 +857,13 @@ if _akt == "👥 Objavi":
                                  format_func=lambda i: f"{_opcije_t[i].get('naziv')} · "
                                                        f"{model.tekst(_opcije_t[i].get('status'))}",
                                  key="v2_obj_test")
+        # §0 (zadatak 06): promjena testa NE SMIJE naslijediti izbor učenika/šifre iz prethodne
+        # objave — inače se objavi pogrešnom učeniku (prijavljeno: OH3356 dobio 3 testa zaredom).
+        if st.session_state.get("v2_obj_zadnji_test") != _odabir_t:
+            for _k in ("v2_obj_ucenici", "v2_obj_sifre", "v2_obj_grupe"):
+                st.session_state.pop(_k, None)
+            st.session_state["v2_obj_zadnji_test"] = _odabir_t
+
         _d = _opcije_t[_odabir_t]
 
         _u_roku = dodjele.rok_dodjele({}, _d)
@@ -900,6 +949,11 @@ if _akt == "👥 Objavi":
 
             _rucno = st.text_input("Ili šifre ručno (odvoji zarezom)", key="v2_obj_sifre",
                                    placeholder="AA1111, BB2222")
+            # §0 (zadatak 06): šifra koja ne postoji u CRM tabu `Učenici` NE smije tiho proći
+            _rucno_sifre = [x.strip().upper() for x in model.tekst(_rucno).replace(";", ",").split(",")
+                            if x.strip()]
+            _provjera_s = dodjele.provjeri_sifre(_svi_u, _rucno_sifre)
+            _nepoznate = _provjera_s["nepoznate"]
             _cilj = dodjele.sastavi_cilj(
                 "ucenici",
                 ucenici_odabrani=([{"ucenik_id": k, "ime_djeteta": _svi_u.get(k, "")}
@@ -923,11 +977,23 @@ if _akt == "👥 Objavi":
         else:
             _jedinstveni = {u["ucenik_id"] for u in _cilj if u.get("ucenik_id")}
             _moze = bool(_jedinstveni)
+            _nepoznate = locals().get("_nepoznate") or []
+            if _nepoznate:
+                _moze = False
+                st.error("Ove šifre **ne postoje** u CRM tabu `Učenici` — objava je blokirana "
+                         "dok ih ne ispraviš: **" + ", ".join(_nepoznate) + "**")
             if _moze:
                 _imena = ", ".join(sorted({u.get("ime_djeteta") or u["ucenik_id"]
                                            for u in _cilj})[:6])
                 st.caption(f"Test će dobiti **{len(_jedinstveni)}** učenika: {_imena}"
                            + (" …" if len(_jedinstveni) > 6 else ""))
+                with st.expander("Točan popis kome ide (ime + šifra)"):
+                    st.dataframe(
+                        sorted(({"Učenik": (u.get("ime_djeteta") or "—"),
+                                 "Šifra": u["ucenik_id"]} for u in _cilj
+                                if u.get("ucenik_id")),
+                               key=lambda r: r["Učenik"]),
+                        hide_index=True, width="stretch")
 
         if st.button("📤 Objavi", type="primary", key="v2_obj_gumb", disabled=not _moze):
             try:
@@ -1766,6 +1832,47 @@ if _akt == "🧑‍🎓 Kao učenik":
 
 
 if _akt == "⚙️ Postavke":
+    with st.expander("🧹 Čišćenje dodjela (pogrešne šifre i pojedinačno brisanje)"):
+        try:
+            st.caption("Za brisanje dodjele koja nema pokušaj (npr. šifra koja ne postoji). "
+                       "Ako dodjela ima pokušaj, brisanje se odbija da ne izgubi rezultat.")
+            _svi_uc_c = _svi_ucenici_map()
+            _dod_sve = _dodjele()
+            _nepoznate_d = [d for d in _dod_sve
+                            if model.tekst(d.get("ucenik_id")).upper() not in _svi_uc_c]
+            st.write(f"Dodjela ukupno: **{len(_dod_sve)}** · s nepostojećom šifrom: "
+                     f"**{len(_nepoznate_d)}**")
+            if _nepoznate_d:
+                st.dataframe([{"dodjela_id": model.tekst(d.get("dodjela_id")),
+                               "šifra": model.tekst(d.get("ucenik_id")),
+                               "test": model.tekst(d.get("definicija_id"))}
+                              for d in _nepoznate_d], hide_index=True, width="stretch")
+                _potvrdi_c = st.checkbox("Potvrđujem brisanje dodjela s nepostojećom šifrom",
+                                         key="v2_cisc_potv")
+                if st.button("🧹 Obriši te dodjele", disabled=not _potvrdi_c,
+                             key="v2_cisc_dodjela"):
+                    _rez_c = dodjele.pocisti_neispravne(_sheet(), set(_svi_uc_c))
+                    st.success(f"Obrisano: **{_rez_c['obrisano']}**, preskočeno: "
+                               f"**{_rez_c['preskoceno']}**")
+                    if _rez_c["popis"]:
+                        st.dataframe(_rez_c["popis"], hide_index=True, width="stretch")
+                    _osvjezi()
+
+            st.divider()
+            _jedna = st.text_input("Obriši jednu dodjelu po ID-u (npr. D26-0059)",
+                                   key="v2_cisc_jedna")
+            _sila = st.checkbox("Briši i ako ima pokušaj (gubi se rezultat)", key="v2_cisc_sila")
+            if st.button("🗑️ Obriši dodjelu", key="v2_cisc_gumb", disabled=not _jedna):
+                _rez_j = dodjele.obrisi_dodjelu(_sheet(), _jedna, sila=_sila)
+                if _rez_j["obrisano"]:
+                    st.success(f"Dodjela **{model.tekst(_jedna)}** je obrisana.")
+                    _osvjezi()
+                else:
+                    st.warning(_rez_j["razlog"] or "Nije obrisano.")
+        except Exception as _e_c:                       # noqa: BLE001
+            st.caption(f"Čišćenje trenutno nije dostupno: {_e_c}")
+
+
     upute.prikazi(st, "postavke")
 
     st.subheader("🧪 Samoprovjera (prijašnja rješenja)")

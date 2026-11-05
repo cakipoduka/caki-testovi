@@ -1,6 +1,13 @@
 """
-CAKI testovi v2 — `pages/1_Ucenik.py`
-PRAVA STRANICA UČENIKA: prijava šifrom → popis testova → rješavanje → pregled rezultata.
+CAKI testovi v2 — `pages/1_Interni_pregled.py`
+
+🔍 **INTERNI PREGLED (admin), nije ulaz za učenike.**
+Učenici ulaze **isključivo preko Moj CAKI** (`caki-booking-termina`), koji čita iste v2 tabove i
+koristi isti `ekran_ucenika`. Ova stranica služi Cakiju/profesoru da vidi TOČNO što učenik vidi
+(korisno za provjeru bridgea i rokova). Traži `APP_PASSWORD`.
+
+PRIJAŠNJA NAMJENA (03.11.2026.) — prijava šifrom bez lozinke — više ne vrijedi: UPDATE 05-11 je
+odredio da je Moj CAKI jedini ulaz za učenika.
 
 Ovo je ono što učenik vidi. Admin kartice (Testovi, Objavi, Rezultati, Postavke) su u glavnoj
 aplikaciji i ovdje se ne učitavaju.
@@ -32,8 +39,42 @@ from veza import sheet_crm
 import caki_stil as stil          # 31.10.2026.: CAKI tema  # noqa: F401
 import caki_tema as tema          # 3.11.2026.: tema kao CRM (IBM Plex Sans)
 
-st.set_page_config(page_title="CAKI — Testovi", page_icon="📝", layout="centered")
+st.set_page_config(page_title="CAKI — Interni pregled", page_icon="🔍", layout="centered")
 tema.primijeni()                  # 3.11.2026.: tema kao CRM
+
+# ---------------------------------------------------------------- 🔒 ADMIN GATE (UPDATE 05-11)
+# Ovo NIJE ulaz za učenike. Učenici ulaze preko Moj CAKI (caki-booking-termina).
+st.info("**Interni pregled.** Učenici ulaze isključivo preko **Moj CAKI** portala. "
+        "Ova stranica služi provjeri što učenik vidi.", icon="🔍")
+
+
+def _admin_ok() -> bool:
+    """Zaključaj stranicu `APP_PASSWORD`-om (isti secret kao admin aplikacija)."""
+    import hmac
+    import os
+
+    if st.session_state.get("v2_interni_ok"):
+        return True
+    try:
+        tajna = str(st.secrets.get("APP_PASSWORD", "")) or os.environ.get("APP_PASSWORD", "")
+    except Exception:                                   # noqa: BLE001
+        tajna = os.environ.get("APP_PASSWORD", "")
+    if not tajna:
+        st.error("Nedostaje `APP_PASSWORD` u Secrets — stranica je zaključana.")
+        return False
+    with st.form("v2_interni_prijava"):
+        lozinka = st.text_input("Admin lozinka", type="password")
+        if st.form_submit_button("Otvori pregled", type="primary") and lozinka:
+            if hmac.compare_digest(lozinka, tajna):
+                st.session_state["v2_interni_ok"] = True
+                st.rerun()
+            st.error("Lozinka nije ispravna.")
+    return False
+
+
+if not _admin_ok():
+    st.stop()
+
 
 
 @st.cache_resource(show_spinner=False)
@@ -44,8 +85,8 @@ def _sheet():
 def _prijava() -> str:
     if st.session_state.get("v2u_sifra"):
         return st.session_state["v2u_sifra"]
-    st.title("📝 CAKI — Testovi")
-    st.caption("Prijavi se svojom šifrom (dobio si je u školi).")
+    st.subheader("Prikaži testove za šifru")
+    st.caption("Interni pregled: upiši šifru učenika da vidiš njegov ekran.")
     with st.form("v2u_prijava"):
         sifra = st.text_input("Šifra učenika", placeholder="npr. AA1111").strip().upper()
         if st.form_submit_button("Prijavi se", type="primary") and sifra:

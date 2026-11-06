@@ -25,6 +25,44 @@ DRAFT_HEADERS = ["draft_id", "zadnja_izmjena", "naslov_dokumenta", "tip_dokument
                  "prikazi_rjesenja", "broj_zadataka", "sadrzaj_json"]
 
 
+
+
+# ---------------------------------------------------------------- zaglavlja i priprema tabova
+# 05.11.2026.: tabovi predložaka/drafta ne postoje u CRM Sheetu (samo u bazi zadataka), pa je
+# spremanje padalo. Zaglavlja su ovdje, a `osiguraj()` ih upiše prije prvog zapisa.
+ZAGLAVLJA = {
+    TAB_PREDLOSCI: ["predlozak_id", "naziv", "datum_spremanja", "naslov_dokumenta",
+                    "tip_dokumenta", "prikazi_rjesenja", "zadaci_json", "broj_zadataka",
+                    "autor"],
+    TAB_NACRT: ["draft_id", "zadnja_izmjena", "naslov_dokumenta", "tip_dokumenta",
+                "prikazi_rjesenja", "zadaci_json", "broj_zadataka"],
+}
+
+
+def osiguraj(sheet) -> list[str]:
+    """Napravi tabove predložaka/drafta i upiši zaglavlja. Vraća popis napravljenih."""
+    napravljeni = []
+    for tab, kolone in ZAGLAVLJA.items():
+        try:
+            if tablice.ucitaj(sheet, tab):
+                continue
+        except Exception:                               # noqa: BLE001
+            pass
+        try:
+            ws = tablice.osiguraj(sheet, tab)
+            if ws is None:
+                continue
+            ws.update(values=[kolone], range_name="A1")
+            try:
+                tablice._zaboravi(sheet, tab)
+            except Exception:                           # noqa: BLE001
+                pass
+            napravljeni.append(tab)
+        except Exception:                               # noqa: BLE001
+            continue
+    return napravljeni
+
+
 def _svi(sheet, tab: str) -> list[dict]:
     try:
         return tablice.ucitaj(sheet, tab)

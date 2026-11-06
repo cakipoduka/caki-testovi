@@ -440,6 +440,11 @@ if _akt == "🧪 Testovi":
                 st.caption(f"Uređivanje trenutno nije dostupno: {_e_u}")
 
 if _akt == "🧱 Složi test":
+    try:
+        predlosci.osiguraj(_sheet())        # 05.11.2026.: tabovi predložaka u CRM Sheetu
+    except Exception:                       # noqa: BLE001
+        pass
+
     upute.prikazi(st, "pdf")
     st.caption("**Jedno mjesto za slaganje testa:** odaberi zadatke iz baze → ispiši **PDF** ili "
                "spremi kao **online test** (isti odabir, dva izlaza).")

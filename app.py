@@ -911,6 +911,29 @@ if _akt == "🧱 Složi test":
         except Exception as _e_rep:                     # noqa: BLE001
             st.caption(f"Ponavljanje testa trenutno nije dostupno: {_e_rep}")
 
+            with st.expander("🗑️ Obriši test i SVE rezultate (nepovratno)"):
+                st.error("Ovo briše test **i sve njegove rezultate**: pokušaje, ocjene po zadatku, "
+                         "dodjele, izmjene ocjena i žalbe. **Nema vraćanja.**")
+                st.caption("Ako želiš sačuvati rezultate, nemoj brisati — postavi status "
+                           "`arhiviran` (✏️ Uredi test → Deaktiviraj/Arhiviraj).")
+                _potvrdi_text = st.text_input(
+                    f"Upiši točan ID testa (`{_odabir_l}`) da potvrdiš brisanje",
+                    key=f"v2_bris_sve_text_{_odabir_l}")
+                _bris_sve = st.checkbox(
+                    "Razumijem da su rezultati nepovratno obrisani",
+                    key=f"v2_bris_sve_potv_{_odabir_l}")
+                _moze_bris = (model.tekst(_potvrdi_text).upper() == model.tekst(_odabir_l).upper()
+                              and _bris_sve)
+                if st.button("🗑️ Obriši test i sve rezultate", type="primary",
+                             disabled=not _moze_bris, key=f"v2_bris_sve_gumb_{_odabir_l}"):
+                    _ok_s, _raz_s = definicije.obrisi(_sheet(), _odabir_l, korisnik="caki",
+                                                      sila=True)
+                    if _ok_s:
+                        st.success(_raz_s)
+                        _osvjezi()
+                    else:
+                        st.warning(_raz_s)
+
 if _akt == "👥 Objavi":
     upute.prikazi(st, "objavi")
     _testovi_obj = _testovi()

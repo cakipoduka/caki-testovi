@@ -460,20 +460,109 @@ def _posalji_slike(st, sheet, definicija: dict, dodjela: dict, pokusaj: dict, uc
                     st.rerun()
 
 
+def _skini_mathrm(tekst: str) -> str:
+    """Skini `\mathrm{...}` (i `\text{...}`) omotače — zadrži unutrašnjost.
+
+    MathLive sprema odgovor kao `\mathrm{\frac{...}}`; za prikaz nam treba samo `\frac{...}`.
+    """
+    import re
+
+    s = model.tekst(tekst)
+    for omotac in (r"\\mathrm", r"\\text", r"\\operatorname"):
+        while True:
+            m = re.search(omotac + r"\{", s)
+            if not m:
+                break
+            dubina = 0
+            kraj = None
+            for i in range(m.end() - 1, len(s)):
+                if s[i] == "{":
+                    dubina += 1
+                elif s[i] == "}":
+                    dubina -= 1
+                    if dubina == 0:
+                        kraj = i
+                        break
+            if kraj is None:
+                break
+            s = s[:m.start()] + s[m.end():kraj] + s[kraj + 1:]
+    return s
+
+
+def _odgovor_za_prikaz(tekst: str) -> str:
+    """Učenikov odgovor u čitljivom obliku.
+
+    U bazi se odgovor često sprema kao `\mathrm{\frac{3-a}{3a}}` (LaTeX omotač iz MathLivea).
+    Skidamo omotač i omatamo u `$…$` da Streamlit/KaTeX prikaže razlomak, a ne sirovi kod.
+    """
+    sirovo = model.tekst(tekst)
+    if not sirovo:
+        return ""
+    unutra = _skini_mathrm(sirovo)
+    if not unutra:
+        unutra = sirovo
+    if unutra.count("$") >= 2:                    # već je matematički
+        return unutra
+    ima_latex = any(x in unutra for x in ("\\", "^{", "_{", "\\frac", "\\sqrt"))
+    if ima_latex or unutra != sirovo:
+        return f"${unutra}$"
+    return unutra
+
+
+def _ocjene_pokusaja(sheet, pokusaj: dict) -> dict:
+    """Mapa zadatak_id → {tocno, bodovi, max, komentar} za JEDAN pokušaj."""
+    izlaz = {}
+    if sheet is None or not pokusaj:
+        return izlaz
+    pid = model.tekst(pokusaj.get("pokusaj_id"))
+    if not pid:
+        return izlaz
+    try:
+        import tablice as _t
+
+        for r in _t.ucitaj(sheet, _t.TAB_OCJENE):
+            if model.tekst(r.get("pokusaj_id")) != pid:
+                continue
+            izlaz[model.tekst(r.get("zadatak_id"))] = {
+                "tocno": model.tekst(r.get("tocno")).lower() in ("da", "true", "točno", "tocno"),
+                "bodovi": model.broj(r.get("bodovi"), 0),
+                "max": model.broj(r.get("max"), 0),
+                "komentar": model.tekst(r.get("komentar")),
+            }
+    except Exception:                               # noqa: BLE001
+        return {}
+    return izlaz
+
+
 def prikazi_pregled_rjesenja(st, zadaci: list[dict], odgovori: dict, *,
                              pokazi_rjesenja: bool, pokazi_video: bool,
                              pokazi_bodove: bool, sheet=None,
                              pokusaj: dict | None = None, ucenik_id: str = "") -> None:
     """Nakon testa: što je učenik odgovorio, točan odgovor i 🎬 video — po Student View-u."""
+    _ocjene = _ocjene_pokusaja(sheet, pokusaj) if (sheet is not None and pokusaj) else {}
     for i, z in enumerate(zadaci or []):
         red = rjesavanje.pregled_zadatka(
             z, model.tekst((odgovori or {}).get(str(i))),
             pokazi_rjesenje=pokazi_rjesenja, pokazi_video=pokazi_video,
             pokazi_bodove=pokazi_bodove)
         oznaka = "🎬 video" if red["video"] else "pregled"
+        _ocj = _ocjene.get(model.tekst(z.get("id"))) or {}
+        if _ocj and pokazi_bodove:
+            if _ocj.get("tocno"):
+                oznaka = f"✔ točno · {_ocj['bodovi']:g}/{_ocj['max']:g} boda"
+            elif not model.tekst((odgovori or {}).get(str(i))):
+                oznaka = "⚪ bez odgovora · 0 bodova"
+            else:
+                oznaka = f"✘ netočno · {_ocj['bodovi']:g}/{_ocj['max']:g} boda"
         with st.expander(f"Zadatak {i + 1} — {oznaka}"):
             prikazi_tekst_s_tabelama(red["tekst"])
-            st.caption(f"Tvoj odgovor: **{red['moj_odgovor'] or '— (prazno)'}**")
+            _moj = _odgovor_za_prikaz(red["moj_odgovor"])
+            if _moj:
+                st.markdown(f"**Tvoj odgovor:** {_moj}")
+            else:
+                st.caption("Tvoj odgovor: — (prazno)")
+            if _ocj and pokazi_bodove and model.tekst(_ocj.get("komentar")):
+                st.info(f"💬 Komentar profesora: {_ocj['komentar']}")
             if red["pokazi_rjesenje"]:
                 st.success(f"Točno: {red['tocan_odgovor']}")
             if red["video"]:

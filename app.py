@@ -28,6 +28,7 @@ import provjera_ocjena
 import posjete
 import po_uceniku
 import raspodjela
+import repriza
 import podsjetnik
 import banka
 import brend
@@ -851,6 +852,65 @@ if _akt == "🧱 Složi test":
                     else:
                         st.warning(_raz_b)
 
+    with st.expander("🔁 Ponovi test za one koji nisu pisali"):
+        try:
+            st.caption("Napravi **novu kopiju** testa s istim zadacima i objavi je samo učenicima "
+                       "koji ga još nisu predali. Original se ne dira (ostaje arhiva).")
+            _izvor_opcije = {model.tekst(x.get("definicija_id")): x for x in _testovi()}
+            if not _izvor_opcije:
+                st.caption("Nema testova.")
+            else:
+                _izvor_id = st.selectbox(
+                    "Koji test ponoviti", list(_izvor_opcije), key="v2_rep_izvor",
+                    format_func=lambda i: (f"{model.tekst(_izvor_opcije[i].get('naziv'))}"
+                                           f" · {model.tekst(_izvor_opcije[i].get('status'))}"))
+                _ne_pisali = repriza.nisu_predali(_sheet(), _izvor_id)
+                _novi_naziv = st.text_input(
+                    "Naziv novog testa", value="", key="v2_rep_naziv",
+                    placeholder=(model.tekst(_izvor_opcije[_izvor_id].get("naziv"))
+                                 + " — ponovno"))
+                _c1, _c2 = st.columns(2)
+                _rep_od = _c1.date_input("Otvoren od", key="v2_rep_od")
+                _rep_do = _c2.date_input("Otvoren do", key="v2_rep_do")
+
+                if not _ne_pisali:
+                    st.success("Svi učenici tog testa su ga već predali — nema kome ponoviti.")
+                else:
+                    st.write(f"Test nije predalo **{len(_ne_pisali)}** učenika:")
+                    st.dataframe(_ne_pisali, hide_index=True, width="stretch")
+                    _odabrani_rep = st.multiselect(
+                        "Kome objaviti (zadano: svi koji nisu predali)",
+                        [r["ucenik_id"] for r in _ne_pisali],
+                        default=[r["ucenik_id"] for r in _ne_pisali],
+                        format_func=lambda k: next(
+                            (f"{r['ime_djeteta']} ({k})" for r in _ne_pisali
+                             if r["ucenik_id"] == k), k),
+                        key="v2_rep_ucenici")
+                    if _rep_do < _rep_od:
+                        st.error("Rok „do” ne može biti prije roka „od”.")
+                    elif _rep_do < _datum_danas():
+                        st.error("Rok je već prošao — učenik test ne bi vidio.")
+                    if st.button("🔁 Napravi kopiju i objavi", type="primary",
+                                 key="v2_rep_gumb",
+                                 disabled=(_rep_do < _rep_od
+                                           or _rep_do < _datum_danas()
+                                           or not _odabrani_rep)):
+                        _klon = repriza.kloniraj_kao_novi(
+                            _sheet(), _izvor_id, naziv=_novi_naziv or "",
+                            status="objavljen", autor="caki")
+                        if _klon.get("greska"):
+                            st.error(_klon["greska"])
+                        else:
+                            _obj = repriza.objavi_odabranima(
+                                _sheet(), _klon["definicija_id"], _odabrani_rep,
+                                rok_od=_rep_od.isoformat(), rok_do=_rep_do.isoformat())
+                            st.success(f"Napravljen test **{_klon['definicija_id']}** "
+                                       f"({_klon['broj_zadataka']} zadataka) i objavljen "
+                                       f"**{_obj['napravljeno']}** učenicima.")
+                            _osvjezi()
+        except Exception as _e_rep:                     # noqa: BLE001
+            st.caption(f"Ponavljanje testa trenutno nije dostupno: {_e_rep}")
+
 if _akt == "👥 Objavi":
     upute.prikazi(st, "objavi")
     _testovi_obj = _testovi()
@@ -974,6 +1034,20 @@ if _akt == "👥 Objavi":
         else:
             st.caption("🔒 Nacrt se sprema u Sheet, ali ga **ne vidi nijedan učenik**. Poslije ga "
                        "objavljuješ u 🧪 Testovi.")
+
+        # ---- 2) upozorenje: bez roka učenik NE vidi rješenja
+        _rok_do_def = model.tekst(_d.get("rok_do"))
+        if not _rok_do_def:
+            st.warning("Test **nema `rok_do`** — učenik nikad neće vidjeti **rješenja i video** "
+                       "(prikazuju se nakon roka). Postavi rok u ✏️ Uredi test.", icon="⏳")
+
+        # ---- 3) sažetak: što će učenik vidjeti (Student View)
+        with st.expander("👁 Što će učenik vidjeti"):
+            try:
+                for _sv in definicije.sto_vidi(_d.get("student_view_json")):
+                    st.write(f"**{_sv['naziv']}** — {_sv['znaci']}")
+            except Exception as _e_sv:                  # noqa: BLE001
+                st.caption(f"Student View trenutno nije dostupan: {_e_sv}")
 
         # ---- sažetak prije objave (UX: vidiš što ćeš napraviti)
         if _publika == "svi":
@@ -1292,6 +1366,27 @@ if _akt == "📊 Rezultati":
                                    f"{model.broj(_red.get('max'), model.broj(_z.get('bodovi'), 1)):g} "
                                    f"· izvor: {model.tekst(_red.get('izvor_ocjene')) or '—'}")
                         st.markdown(builder.pripremi_za_prikaz(_z.get("tekst"))[:400])
+                        # --- odgovor učenika i službeno rješenje (Caki 6.11.2026.)
+                        _u_odg = model.tekst(_red.get("odgovor"))
+                        _sl_odg = model.tekst(_z.get("odgovor"))
+                        _k1, _k2 = st.columns(2)
+                        with _k1:
+                            if _u_odg:
+                                _k1.markdown(
+                                    f"**Odgovor učenika:** "
+                                    f"{ekran_ucenika._odgovor_za_prikaz(_u_odg)}")
+                            else:
+                                _k1.caption("**Odgovor učenika:** — (prazno)")
+                        with _k2:
+                            if _sl_odg:
+                                _k2.markdown(
+                                    f"**Službeno rješenje:** "
+                                    f"{ekran_ucenika._odgovor_za_prikaz(_sl_odg)}")
+                            else:
+                                _k2.caption("**Službeno rješenje:** — (nije upisano)")
+                        if model.tekst(_red.get("izvor_ocjene")) in ("ai", "?"):
+                            st.caption(f"⚠️ Ocjena je nesigurna (izvor: "
+                                       f"{model.tekst(_red.get('izvor_ocjene'))}) — provjeri ručno.")
                         _c1, _c2, _c3 = st.columns([1, 1, 3])
                         _tocno = _c1.checkbox(
                             "Točno", value=model.tekst(_red.get("tocno")).lower() in ("da", "true"),

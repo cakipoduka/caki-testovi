@@ -27,6 +27,13 @@
 4. **Nema poslovne logike u `app.py`.** Aplikacija samo spaja module i crta; sve odluke su u modulima
    (zato su testirani bez Streamlita).
 5. **Rezultat je dokaz.** Predani pokušaj se ne prepisuje; ručna ocjena mijenja `izvor_ocjene`, ne briše trag.
+6. **Testovi žive u repou**, u `caki-testovi/testovi/` (odluka 20.11.2026.). Prije su bili u
+   `CAKI_razvoj/testovi/`, izvan gita — kvar računala 19./20.11. odnio je tako 9 datoteka i ~105
+   testova. Što Push ne čuva, to ne postoji. `conftest.py` postavlja `sys.path` i čisti
+   predmemoriju između testova.
+7. **Sučelje nikad ne stoji unutar `except` bloka.** Tamo se vidi samo kad nešto drugo padne.
+   Dopušteno je jedino kratko objašnjenje greške (bez gumba i polja, do osam redaka); to čuva
+   test `test_nijedna_funkcionalnost_nije_zakopana_u_except_bloku`.
 
 ## 2. Moduli
 

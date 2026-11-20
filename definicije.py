@@ -451,6 +451,65 @@ def vrati_iz_arhive(sheet, definicija_id: str, *, korisnik: str = "",
                   "mijenjati; za učenike ga objavi u 👥 Objavi.")
 
 
+def _prebroji(sheet, tab: str, uvjet) -> int:
+    """Koliko redaka u tabu zadovoljava uvjet. Nedostupan tab = 0, ne greška."""
+    try:
+        return sum(1 for r in tablice.ucitaj(sheet, tab) if uvjet(r))
+    except Exception:                                   # noqa: BLE001
+        return 0
+
+
+def opseg_brisanja(sheet, definicija_id: str) -> dict:
+    """Koliko bi redaka brisanje odnijelo — brojevi koje sučelje pokazuje PRIJE klika.
+
+    Read-only; ništa ne mijenja. Postoji zato da dijalog brisanja može napisati točan opseg i
+    zaključati gumb s objašnjenjem, umjesto da korisnik klikne i tek onda dobije odbijenicu
+    (UX pravilo 4: „ako je gumb zaključan — napiši zašto").
+
+    Ključ `smije_bez_rezultata` kaže smije li se test obrisati uz odgovor „rezultati: NE".
+    """
+    did = model.tekst(definicija_id)
+    prazno = {"definicija_id": did, "postoji": False, "naziv": "", "status": "",
+              "pokusaji": 0, "ocjene": 0, "dodjele": 0, "izmjene": 0, "zalbe": 0,
+              "statistika": 0, "rezultata_ukupno": 0, "ima_pokusaje": False,
+              "smije_bez_rezultata": False, "razlog": "Test ne postoji."}
+    if not did:
+        return dict(prazno, razlog="Nedostaje ID testa.")
+    d = po_id(sheet, did)
+    if not d:
+        return prazno
+
+    pokusaji = pokusaji_testa(sheet, did)
+    pids = {model.tekst(p.get("pokusaj_id")) for p in pokusaji
+            if model.tekst(p.get("pokusaj_id"))}
+
+    opseg = {
+        "definicija_id": did,
+        "postoji": True,
+        "naziv": model.tekst(d.get("naziv")),
+        "status": model.tekst(d.get("status")),
+        "pokusaji": len(pokusaji),
+        "dodjele": _prebroji(sheet, tablice.TAB_DODJELE,
+                             lambda r: model.tekst(r.get("definicija_id")) == did),
+        "ocjene": _prebroji(sheet, tablice.TAB_OCJENE,
+                            lambda r: model.tekst(r.get("pokusaj_id")) in pids) if pids else 0,
+        "izmjene": _prebroji(sheet, tablice.TAB_IZMJENE_OCJENA,
+                             lambda r: model.tekst(r.get("pokusaj_id")) in pids) if pids else 0,
+        "zalbe": _prebroji(sheet, tablice.TAB_ZALBE,
+                           lambda r: model.tekst(r.get("pokusaj_id")) in pids) if pids else 0,
+        "statistika": _prebroji(sheet, tablice.TAB_STATISTIKA,
+                                lambda r: model.tekst(r.get("definicija_id")) == did),
+    }
+    opseg["ima_pokusaje"] = opseg["pokusaji"] > 0
+    opseg["smije_bez_rezultata"] = not opseg["ima_pokusaje"]
+    opseg["rezultata_ukupno"] = (opseg["pokusaji"] + opseg["ocjene"] + opseg["izmjene"]
+                                 + opseg["zalbe"] + opseg["statistika"])
+    opseg["razlog"] = "" if opseg["smije_bez_rezultata"] else (
+        f"Test ima {opseg['pokusaji']} pokušaja — uz „rezultati: NE” se ne briše, jer je "
+        "rezultat dokaz. Odaberi „rezultati: DA” ili ga arhiviraj.")
+    return opseg
+
+
 def obrisi(sheet, definicija_id: str, *, korisnik: str = "",
            sila: bool = False) -> tuple[bool, str]:
     """Obriši test. Vraća (uspjeh, razlog).
@@ -476,14 +535,10 @@ def obrisi(sheet, definicija_id: str, *, korisnik: str = "",
                        "Predlažem **arhiviranje** (status `arhiviran`) ili brisanje s rezultatima "
                        "(`sila=True`, nepovratno).")
 
-    obrisane_dodjele = 0
+    # 20.11.2026.: jedno čitanje taba umjesto jednog po dodjeli (prije: `obrisi()` u petlji).
     try:
-        for red in tablice.ucitaj(sheet, tablice.TAB_DODJELE):
-            if model.tekst(red.get("definicija_id")) != did:
-                continue
-            if tablice.obrisi(sheet, tablice.TAB_DODJELE, "dodjela_id",
-                              model.tekst(red.get("dodjela_id"))):
-                obrisane_dodjele += 1
+        obrisane_dodjele = tablice.obrisi_gdje(sheet, tablice.TAB_DODJELE,
+                                               {"definicija_id": did})
     except Exception as e:                              # noqa: BLE001
         return False, f"Dodjele nije moguće obrisati: {e}"
 
@@ -619,78 +674,120 @@ def smije_ai(definicija: dict) -> bool:
     vrijednost = model.tekst((definicija or {}).get("ai_pomoc")).lower()
     return vrijednost in ("da", "1", "true", "tocno", "točno")
 
+
 def _obrisi_s_rezultatima(sheet, definicija_id: str, pokusaji: list[dict], *,
                           korisnik: str = "") -> tuple[bool, str]:
-    """Nepovratno: obriši test i SVE njegove rezultate. Vraća (uspjeh, poruka s brojevima)."""
+    """Nepovratno: obriši test i SVE njegove rezultate. Vraća (uspjeh, poruka s brojevima).
+
+    Red je od lišća prema korijenu, da nijedan redak ne ostane bez svog testa:
+    ocjene/izmjene/žalbe po pokušaju → pokušaj → statistika → dodjele → test.
+
+    Tri popravka 20.11.2026. (nađena pri provjeri, prije nego je sučelje postalo dostupno):
+
+    1. **Statistika se prije nije brisala.** Uvjet je tražio stupac `statistika_id`, a tab
+       `Statistika_zadataka` ga ne poznaje (ključ je `zadatak_id` + `definicija_id`), pa je izraz
+       uvijek bio 0 i redci su ostajali kao siročići.
+    2. **Pokušaji se brišu po `pokusaj_id`, ne po `definicija_id`.** `Pokusaji` ima oba stupca, ali
+       `definicija_id` smije biti prazan — zato `pokusaji_testa()` i traži preko `dodjela_id`.
+       Brisanje po `definicija_id` promašilo bi upravo te retke.
+    3. **Dnevnik je dobivao prazan redak.** Upisivalo se ključevima `radnja_id`/`kada`/`tko`/
+       `detalji`, a tab `Dnevnik_radnji` ima `kad`/`korisnik`/`radnja`/`sto`/`detalj`. Nijedan se
+       nije poklopio, pa je najrazornija radnja u sustavu ostavljala prazan trag. Sada ide kroz
+       `tablice.zapisi_radnju()`, koja piše ispravnim imenima stupaca.
+    """
     did = model.tekst(definicija_id)
-    pids = {model.tekst(p.get("pokusaj_id")) for p in pokusaji if model.tekst(p.get("pokusaj_id"))}
-    brojevi = {"ocjene": 0, "pokusaji": 0, "dodjele": 0, "izmjene": 0, "zalbe": 0,
-               "statistika": 0}
+    pids = [model.tekst(p.get("pokusaj_id")) for p in (pokusaji or [])
+            if model.tekst(p.get("pokusaj_id"))]
+    brojevi = {"ocjene": 0, "izmjene": 0, "zalbe": 0, "pokusaji": 0,
+               "statistika": 0, "dodjele": 0}
 
-    def _brisi(tab: str, uvjet, kljuc: str) -> int:
-        n = 0
+    def _brisi(tab: str, uvjeti: dict) -> int:
         try:
-            for red in tablice.ucitaj(sheet, tab):
-                if not uvjet(red):
-                    continue
-                if tablice.obrisi(sheet, tab, kljuc, model.tekst(red.get(kljuc))):
-                    n += 1
-        except Exception:                               # noqa: BLE001
-            return n
-        return n
+            return tablice.obrisi_gdje(sheet, tab, uvjeti)
+        except Exception:                               # noqa: BLE001 — jedan tab ne ruši ostatak
+            return 0
 
-    brojevi["ocjene"] = _brisi(
-        tablice.TAB_OCJENE,
-        lambda r: model.tekst(r.get("pokusaj_id")) in pids, "pokusaj_id") if False else 0
+    for pid in pids:
+        brojevi["ocjene"] += _brisi(tablice.TAB_OCJENE, {"pokusaj_id": pid})
+        brojevi["izmjene"] += _brisi(tablice.TAB_IZMJENE_OCJENA, {"pokusaj_id": pid})
+        brojevi["zalbe"] += _brisi(tablice.TAB_ZALBE, {"pokusaj_id": pid})
+        brojevi["pokusaji"] += _brisi(tablice.TAB_POKUSAJI, {"pokusaj_id": pid})
 
-    # ocjene po pokušajima (ključ je pokusaj_id + zadatak_id → brišemo po pokusaj_id)
-    try:
-        for red in list(tablice.ucitaj(sheet, tablice.TAB_OCJENE)):
-            if model.tekst(red.get("pokusaj_id")) not in pids:
-                continue
-            if tablice.obrisi(sheet, tablice.TAB_OCJENE, "pokusaj_id",
-                              model.tekst(red.get("pokusaj_id"))):
-                brojevi["ocjene"] += 1
-    except Exception:                                   # noqa: BLE001
-        pass
-
-    brojevi["izmjene"] = _brisi(
-        tablice.TAB_IZMJENE_OCJENA,
-        lambda r: model.tekst(r.get("pokusaj_id")) in pids, "pokusaj_id")
-    brojevi["zalbe"] = _brisi(
-        tablice.TAB_ZALBE,
-        lambda r: model.tekst(r.get("pokusaj_id")) in pids, "zalba_id")
-    brojevi["statistika"] = _brisi(
-        tablice.TAB_STATISTIKA,
-        lambda r: model.tekst(r.get("definicija_id")) == did,
-        "statistika_id") if "statistika_id" in (tablice.ZAGLAVLJA.get(
-            tablice.TAB_STATISTIKA) or []) else 0
-    brojevi["pokusaji"] = _brisi(
-        tablice.TAB_POKUSAJI,
-        lambda r: model.tekst(r.get("definicija_id")) == did, "pokusaj_id")
-    brojevi["dodjele"] = _brisi(
-        tablice.TAB_DODJELE,
-        lambda r: model.tekst(r.get("definicija_id")) == did, "dodjela_id")
+    brojevi["statistika"] = _brisi(tablice.TAB_STATISTIKA, {"definicija_id": did})
+    brojevi["dodjele"] = _brisi(tablice.TAB_DODJELE, {"definicija_id": did})
 
     try:
         tablice.obrisi(sheet, tablice.TAB_DEFINICIJE, "definicija_id", did)
     except Exception as e:                              # noqa: BLE001
         return False, f"Rezultati su obrisani, ali test nije: {e}"
 
-    try:
-        tablice.dodaj(sheet, tablice.TAB_DNEVNIK, [{
-            "radnja_id": tablice.novi_id(
-                [model.tekst(r.get("radnja_id")) for r in tablice.ucitaj(sheet, tablice.TAB_DNEVNIK)],
-                "DN-"),
-            "kada": model.sada_iso(), "tko": model.tekst(korisnik) or "caki",
-            "radnja": "obrisan_test_s_rezultatima",
-            "detalji": (f"{did}: ocjene {brojevi['ocjene']}, pokušaji {brojevi['pokusaji']}, "
-                        f"dodjele {brojevi['dodjele']}, izmjene {brojevi['izmjene']}, "
-                        f"žalbe {brojevi['zalbe']}"),
-        }])
-    except Exception:                                   # noqa: BLE001
-        pass
+    tablice.zapisi_radnju(
+        sheet, korisnik or "caki", "obrisan_test_s_rezultatima", did,
+        f"pokušaji {brojevi['pokusaji']}, ocjene {brojevi['ocjene']}, "
+        f"dodjele {brojevi['dodjele']}, izmjene {brojevi['izmjene']}, "
+        f"žalbe {brojevi['zalbe']}, statistika {brojevi['statistika']}")
 
     return True, (f"**Obrisano nepovratno:** test `{did}`, pokušaji **{brojevi['pokusaji']}**, "
                   f"ocjene **{brojevi['ocjene']}**, dodjele **{brojevi['dodjele']}**, "
-                  f"izmjene {brojevi['izmjene']}, žalbe {brojevi['zalbe']}.")
+                  f"izmjene {brojevi['izmjene']}, žalbe {brojevi['zalbe']}, "
+                  f"statistika {brojevi['statistika']}.")
+
+
+# ------------------------------------------------------------------ više testova odjednom
+
+def _zbirno(uspjeli: list, odbijeni: list, glagol: str) -> str:
+    """Jedna rečenica za sučelje: koliko je prošlo, koliko nije i zašto (UX pravilo 4)."""
+    dijelovi = []
+    if uspjeli:
+        dijelovi.append(f"{glagol} **{len(uspjeli)}**: " + ", ".join(f"`{x}`" for x in uspjeli))
+    if odbijeni:
+        dijelovi.append(f"nije prošlo **{len(odbijeni)}**: "
+                        + "; ".join(f"`{oznaka}` — {razlog}" for oznaka, razlog in odbijeni))
+    return " · ".join(dijelovi) or "Nije odabran nijedan test."
+
+
+def obrisi_vise(sheet, oznake, *, sila: bool = False, korisnik: str = "") -> dict:
+    """Obriši više testova odjednom (za višestruki odabir u arhivi).
+
+    Svaki test ide kroz `obrisi()`, pa vrijede ista pravila — test s pokušajima se bez
+    `sila=True` ne briše. **Jedan odbijeni test ne zaustavlja ostale**: tko se smije obrisati,
+    obriše se, a za ostale se vrati razlog. Zato se ne vraća (bool, str) nego rječnik.
+    """
+    obrisani: list = []
+    odbijeni: list = []
+    for oznaka_sirova in (oznake or ()):
+        oznaka = model.tekst(oznaka_sirova)
+        if not oznaka:
+            continue
+        try:
+            ok, razlog = obrisi(sheet, oznaka, korisnik=korisnik, sila=sila)
+        except Exception as e:                          # noqa: BLE001
+            ok, razlog = False, f"greška: {e}"
+        if ok:
+            obrisani.append(oznaka)
+        else:
+            odbijeni.append((oznaka, razlog))
+    return {"obrisani": obrisani, "odbijeni": odbijeni,
+            "poruka": _zbirno(obrisani, odbijeni, "Obrisano")}
+
+
+def vrati_vise_iz_arhive(sheet, oznake, *, korisnik: str = "",
+                         novi_status: str = "zatvoren") -> dict:
+    """Vrati više testova iz arhive odjednom. Isti oblik odgovora kao `obrisi_vise()`."""
+    vraceni: list = []
+    odbijeni: list = []
+    for oznaka_sirova in (oznake or ()):
+        oznaka = model.tekst(oznaka_sirova)
+        if not oznaka:
+            continue
+        try:
+            ok, razlog = vrati_iz_arhive(sheet, oznaka, korisnik=korisnik,
+                                         novi_status=novi_status)
+        except Exception as e:                          # noqa: BLE001
+            ok, razlog = False, f"greška: {e}"
+        if ok:
+            vraceni.append(oznaka)
+        else:
+            odbijeni.append((oznaka, razlog))
+    return {"vraceni": vraceni, "odbijeni": odbijeni,
+            "poruka": _zbirno(vraceni, odbijeni, "Vraćeno iz arhive")}

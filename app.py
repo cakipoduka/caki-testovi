@@ -517,6 +517,158 @@ if _akt == "🧪 Testovi":
             except Exception as _e_u:                   # noqa: BLE001
                 st.caption(f"Uređivanje trenutno nije dostupno: {_e_u}")
 
+        # ---------------------------------------------------------------- 🗑️ OBRIŠI TEST
+        # 20.11.2026.: brisanje je dotad imalo DVA expandera, oba u kartici 🧱 Složi test i oba
+        # UNUTAR `except` blokova (app.py red 916 i 991) — prikazali bi se samo da je nešto drugo
+        # palo, a i tada bi pali na `_odabir_l`, koji se postavlja samo u ovoj kartici.
+        # Zato: jedno mjesto, ovdje, uz ostale radnje nad odabranim testom.
+        with st.expander("🗑️ Obriši test"):
+            try:
+                _opseg = definicije.opseg_brisanja(_sheet(), _odabir_l)
+                st.caption(f"**{_opseg['naziv'] or '—'}** (`{_odabir_l}`) · "
+                           f"status `{_opseg['status'] or '—'}`")
+
+                _izbor_rez = st.radio(
+                    "Brisati i rezultate?",
+                    ("NE — sačuvaj rezultate", "DA — obriši i sve rezultate"),
+                    key=f"v2_bris_rez_{_odabir_l}",
+                    help="NE briše samo definiciju testa i njegove dodjele. Test koji ima "
+                         "pokušaje se tako ne briše, jer je rezultat dokaz — tada je izlaz "
+                         "arhiviranje ili DA.")
+                _sila_b = _izbor_rez.startswith("DA")
+
+                _tablice_b = [("Definicije_testova", 1),
+                              ("Dodjele_ispita", _opseg["dodjele"])]
+                if _sila_b:
+                    _tablice_b += [("Pokusaji", _opseg["pokusaji"]),
+                                   ("Ocjene_zadataka", _opseg["ocjene"]),
+                                   ("Izmjene_ocjena", _opseg["izmjene"]),
+                                   ("Zalbe", _opseg["zalbe"]),
+                                   ("Statistika_zadataka", _opseg["statistika"])]
+                st.dataframe([{"Tablica": _t, "Redaka": _n} for _t, _n in _tablice_b],
+                             hide_index=True, width="stretch")
+                st.caption("Baza zadataka (`Zadaci`) se nikad ne dira. U `Dnevnik_radnji` "
+                           "ostaje trag o brisanju.")
+
+                if _sila_b:
+                    st.error(f"**Nema vraćanja.** Briše se {_opseg['rezultata_ukupno']} redaka "
+                             "rezultata — s njima i dokaz za svaku žalbu na ovaj test. "
+                             "Ako ti rezultati trebaju, odustani i upotrijebi 🗄️ Arhiviraj.")
+                    _id_upis = st.text_input(
+                        f"Upiši točan ID testa (`{_odabir_l}`) da potvrdiš",
+                        key=f"v2_bris_id_{_odabir_l}")
+                    _id_ok = (model.tekst(_id_upis).upper()
+                              == model.tekst(_odabir_l).upper())
+                    _tekst_potv = ("Razumijem da su rezultati nepovratno obrisani i da žalba "
+                                   "nakon ovoga nema dokaz.")
+                else:
+                    _id_ok = True
+                    _tekst_potv = "Potvrđujem da želim obrisati ovaj test."
+                    if not _opseg["smije_bez_rezultata"]:
+                        st.warning(_opseg["razlog"])
+
+                _potv_b = st.checkbox(_tekst_potv, key=f"v2_bris_potv_{_odabir_l}")
+                _smije_b = _sila_b or _opseg["smije_bez_rezultata"]
+                _moze_b = _smije_b and _id_ok and _potv_b
+
+                # UX pravilo 4: zaključan gumb mora reći ZAŠTO je zaključan.
+                if not _smije_b:
+                    _zasto_b = _opseg["razlog"]
+                elif not _id_ok:
+                    _zasto_b = "Zaključano: upiši točan ID testa."
+                elif not _potv_b:
+                    _zasto_b = "Zaključano: označi potvrdu."
+                else:
+                    _zasto_b = ""
+
+                _g1, _g2 = st.columns([1, 2])
+                if _g1.button("🗑️ Obriši test i sve rezultate" if _sila_b else "🗑️ Obriši test",
+                              type="primary", disabled=not _moze_b,
+                              key=f"v2_bris_gumb_{_odabir_l}"):
+                    _ok_b, _raz_b = definicije.obrisi(_sheet(), _odabir_l, korisnik="caki",
+                                                      sila=_sila_b)
+                    if _ok_b:
+                        st.success(_raz_b)
+                        _osvjezi()
+                    else:
+                        st.warning(_raz_b)
+                if _zasto_b:
+                    _g2.caption(_zasto_b)
+            except Exception as _e_b:                   # noqa: BLE001
+                st.caption(f"Brisanje trenutno nije dostupno: {_e_b}")
+
+        # ---------------------------------------------------------------- 🗄️ ARHIVA (više odjednom)
+        _arhivirani_l = [x for x in _testovi_lista
+                         if model.tekst(x.get("status")) == "arhiviran"]
+        if _arhivirani_l:
+            with st.expander(f"🗄️ Arhiva — više testova odjednom ({len(_arhivirani_l)})"):
+                try:
+                    st.caption("Arhiva je **biblioteka predložaka**: test ostaje cijel, samo ga "
+                               "učenik ne vidi. Vraćanje ide u status `zatvoren` — za učenike "
+                               "ga poslije objavi u 👥 Objavi.")
+                    _imena_arh = {
+                        model.tekst(x.get("definicija_id")):
+                            f"{model.tekst(x.get('naziv'))} · "
+                            f"{model.tekst(x.get('definicija_id'))}"
+                        for x in _arhivirani_l}
+                    _odabrani_arh = st.multiselect(
+                        "Odaberi testove iz arhive", list(_imena_arh),
+                        format_func=lambda i: _imena_arh[i], key="v2_arh_odabir")
+
+                    if not _odabrani_arh:
+                        st.caption("Odaberi barem jedan test — radnje se tada otključaju.")
+
+                    if st.button(f"↩️ Vrati odabrane ({len(_odabrani_arh)})",
+                                 disabled=not _odabrani_arh, key="v2_arh_vrati"):
+                        _rez_v = definicije.vrati_vise_iz_arhive(
+                            _sheet(), _odabrani_arh, korisnik="caki")
+                        if _rez_v["vraceni"]:
+                            st.success(_rez_v["poruka"])
+                        else:
+                            st.warning(_rez_v["poruka"])
+                        _osvjezi()
+
+                    st.divider()
+                    _sila_arh = st.toggle(
+                        "Pri brisanju obriši i rezultate", value=False, key="v2_arh_sila",
+                        help="Isključeno: brišu se samo testovi bez pokušaja, ostali se odbijaju "
+                             "uz razlog. Uključeno: briše se i svaki pokušaj, ocjena i žalba.")
+                    if _odabrani_arh:
+                        _opsezi = [definicije.opseg_brisanja(_sheet(), _x)
+                                   for _x in _odabrani_arh]
+                        _s_dokazom = [_o for _o in _opsezi if _o["ima_pokusaje"]]
+                        _rez_ukupno = sum(_o["rezultata_ukupno"] for _o in _opsezi)
+                        if _sila_arh:
+                            st.error(f"**Nepovratno:** {len(_odabrani_arh)} testova i "
+                                     f"{_rez_ukupno} redaka rezultata.")
+                        elif _s_dokazom:
+                            st.warning(
+                                f"{len(_s_dokazom)} od {len(_odabrani_arh)} odabranih ima "
+                                "pokušaje i bez brisanja rezultata bit će odbijeno: "
+                                + ", ".join(f"`{_o['definicija_id']}`" for _o in _s_dokazom))
+
+                    _rijec_arh = st.text_input(
+                        "Upiši OBRIŠI da potvrdiš brisanje odabranih", key="v2_arh_rijec")
+                    _rijec_ok = model.tekst(_rijec_arh).strip().upper() == "OBRIŠI"
+                    _moze_arh = bool(_odabrani_arh) and _rijec_ok
+
+                    _c1, _c2 = st.columns([1, 2])
+                    if _c1.button(f"🗑️ Obriši odabrane ({len(_odabrani_arh)})",
+                                  type="primary", disabled=not _moze_arh, key="v2_arh_obrisi"):
+                        _rez_b = definicije.obrisi_vise(
+                            _sheet(), _odabrani_arh, sila=_sila_arh, korisnik="caki")
+                        if _rez_b["obrisani"]:
+                            st.success(_rez_b["poruka"])
+                        else:
+                            st.warning(_rez_b["poruka"])
+                        _osvjezi()
+                    if not _odabrani_arh:
+                        _c2.caption("Zaključano: nije odabran nijedan test.")
+                    elif not _rijec_ok:
+                        _c2.caption("Zaključano: upiši OBRIŠI u polje iznad.")
+                except Exception as _e_arh:             # noqa: BLE001
+                    st.caption(f"Arhiva trenutno nije dostupna: {_e_arh}")
+
 if _akt == "🧱 Složi test":
     try:
         predlosci.osiguraj(_sheet())        # 05.11.2026.: tabovi predložaka u CRM Sheetu
@@ -912,23 +1064,6 @@ if _akt == "🧱 Složi test":
         except Exception as _e:                             # noqa: BLE001
             st.error(f"Kartica PDF-a trenutno ne radi: {_e}")
 
-
-            st.divider()
-            with st.expander("🗑️ Obriši test (trajno)"):
-                st.caption("Briše se **samo test bez predanih pokušaja**. Ako učenici već imaju "
-                           "pokušaje, test se ne može obrisati — predlaže se arhiviranje "
-                           "(rezultati ostaju).")
-                _potvrda_bris = st.checkbox(
-                    "Potvrđujem da želim obrisati ovaj test", key=f"v2_bris_potv_{_odabir_l}")
-                if st.button("🗑️ Obriši test", type="primary",
-                             disabled=not _potvrda_bris, key=f"v2_bris_gumb_{_odabir_l}"):
-                    _ok_b, _raz_b = definicije.obrisi(_sheet(), _odabir_l, korisnik="caki")
-                    if _ok_b:
-                        st.success(_raz_b)
-                        _osvjezi()
-                    else:
-                        st.warning(_raz_b)
-
     with st.expander("🔁 Ponovi test za one koji nisu pisali"):
         try:
             st.caption("Napravi **novu kopiju** testa s istim zadacima i objavi je samo učenicima "
@@ -988,28 +1123,6 @@ if _akt == "🧱 Složi test":
         except Exception as _e_rep:                     # noqa: BLE001
             st.caption(f"Ponavljanje testa trenutno nije dostupno: {_e_rep}")
 
-            with st.expander("🗑️ Obriši test i SVE rezultate (nepovratno)"):
-                st.error("Ovo briše test **i sve njegove rezultate**: pokušaje, ocjene po zadatku, "
-                         "dodjele, izmjene ocjena i žalbe. **Nema vraćanja.**")
-                st.caption("Ako želiš sačuvati rezultate, nemoj brisati — postavi status "
-                           "`arhiviran` (✏️ Uredi test → Deaktiviraj/Arhiviraj).")
-                _potvrdi_text = st.text_input(
-                    f"Upiši točan ID testa (`{_odabir_l}`) da potvrdiš brisanje",
-                    key=f"v2_bris_sve_text_{_odabir_l}")
-                _bris_sve = st.checkbox(
-                    "Razumijem da su rezultati nepovratno obrisani",
-                    key=f"v2_bris_sve_potv_{_odabir_l}")
-                _moze_bris = (model.tekst(_potvrdi_text).upper() == model.tekst(_odabir_l).upper()
-                              and _bris_sve)
-                if st.button("🗑️ Obriši test i sve rezultate", type="primary",
-                             disabled=not _moze_bris, key=f"v2_bris_sve_gumb_{_odabir_l}"):
-                    _ok_s, _raz_s = definicije.obrisi(_sheet(), _odabir_l, korisnik="caki",
-                                                      sila=True)
-                    if _ok_s:
-                        st.success(_raz_s)
-                        _osvjezi()
-                    else:
-                        st.warning(_raz_s)
 
 if _akt == "👥 Objavi":
     upute.prikazi(st, "objavi")
@@ -1570,45 +1683,45 @@ if _akt == "📊 Rezultati":
     except Exception as _e_pc:                          # noqa: BLE001
         st.caption(f"Provjera trenutno nije dostupna: {_e_pc}")
 
-        # --- C) matrica razreda: učenici × testovi (zadnji rezultat po testu)
-        with st.expander("🧮 Matrica razreda — svi učenici × testovi"):
-            try:
-                _svi_dod = _dodjele()
-                _svi_pok = _pokusaji()
-                _pok_po_dod = {model.tekst(p.get("dodjela_id")): p for p in _svi_pok}
-                _test_po_id = {model.tekst(x.get("definicija_id")): x for x in testovi}
-                _ucenici_mr = {}
-                for _d in _svi_dod:
-                    _u = model.tekst(_d.get("ucenik_id")).upper()
-                    if not _u:
-                        continue
-                    _ime = model.tekst(_d.get("ime_djeteta")) or _u
-                    _ucenici_mr[_u] = _ime
-                _redci_mr = []
-                for _u, _ime in sorted(_ucenici_mr.items(), key=lambda kv: kv[1]):
-                    _red = {"Učenik": _ime, "Šifra": _u}
-                    for _tid, _test in _test_po_id.items():
-                        _naz = model.tekst(_test.get("naziv"))[:18]
-                        _vrijednost = "—"
-                        for _d in _svi_dod:
-                            if (model.tekst(_d.get("ucenik_id")).upper() == _u
-                                    and model.tekst(_d.get("definicija_id")) == _tid):
-                                _p = _pok_po_dod.get(model.tekst(_d.get("dodjela_id")))
-                                if _p:
-                                    _b = model.broj(_p.get("bodovi"), 0)
-                                    _m = model.broj(_p.get("bodovi_max"), 0)
-                                    _vrijednost = f"{int(round(100 * _b / _m))} %" if _m else "—"
-                                else:
-                                    _vrijednost = "⏳"
-                                break
-                        _red[_naz] = _vrijednost
-                    _redci_mr.append(_red)
-                if _redci_mr:
-                    st.dataframe(_redci_mr, hide_index=True, width="stretch")
-                else:
-                    st.caption("Nema podataka za matricu razreda.")
-            except Exception as _e_mr:                  # noqa: BLE001
-                st.caption(f"Matrica razreda trenutno nije dostupna: {_e_mr}")
+    # --- C) matrica razreda: učenici × testovi (zadnji rezultat po testu)
+    with st.expander("🧮 Matrica razreda — svi učenici × testovi"):
+        try:
+            _svi_dod = _dodjele()
+            _svi_pok = _pokusaji()
+            _pok_po_dod = {model.tekst(p.get("dodjela_id")): p for p in _svi_pok}
+            _test_po_id = {model.tekst(x.get("definicija_id")): x for x in testovi}
+            _ucenici_mr = {}
+            for _d in _svi_dod:
+                _u = model.tekst(_d.get("ucenik_id")).upper()
+                if not _u:
+                    continue
+                _ime = model.tekst(_d.get("ime_djeteta")) or _u
+                _ucenici_mr[_u] = _ime
+            _redci_mr = []
+            for _u, _ime in sorted(_ucenici_mr.items(), key=lambda kv: kv[1]):
+                _red = {"Učenik": _ime, "Šifra": _u}
+                for _tid, _test in _test_po_id.items():
+                    _naz = model.tekst(_test.get("naziv"))[:18]
+                    _vrijednost = "—"
+                    for _d in _svi_dod:
+                        if (model.tekst(_d.get("ucenik_id")).upper() == _u
+                                and model.tekst(_d.get("definicija_id")) == _tid):
+                            _p = _pok_po_dod.get(model.tekst(_d.get("dodjela_id")))
+                            if _p:
+                                _b = model.broj(_p.get("bodovi"), 0)
+                                _m = model.broj(_p.get("bodovi_max"), 0)
+                                _vrijednost = f"{int(round(100 * _b / _m))} %" if _m else "—"
+                            else:
+                                _vrijednost = "⏳"
+                            break
+                    _red[_naz] = _vrijednost
+                _redci_mr.append(_red)
+            if _redci_mr:
+                st.dataframe(_redci_mr, hide_index=True, width="stretch")
+            else:
+                st.caption("Nema podataka za matricu razreda.")
+        except Exception as _e_mr:                  # noqa: BLE001
+            st.caption(f"Matrica razreda trenutno nije dostupna: {_e_mr}")
 
     # ---------------------------------------------------------------- ↔️📊 VAL 1 (13 + 14)
     try:

@@ -1,0 +1,10 @@
+# Alati za RAZVOJ i TESTIRANJE — ne trebaju aplikaciji da radi.
+#
+# Streamlit Cloud instalira samo `requirements.txt`, pa ovo tamo nikad ne ode.
+# Kod sebe, u virtualnom okruženju:
+#
+#     pip install -r requirements.txt -r requirements-dev.txt
+#     python -m pytest testovi/ -q
+#
+pytest>=8
+pyflakes>=3

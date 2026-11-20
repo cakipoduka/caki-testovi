@@ -710,7 +710,7 @@ def _imena_iz_svih_tabova(sheet) -> dict:
 
     izlaz: dict = {}
     try:
-        naslovi = [_kao_tekst(getattr(w, "title", "")) for w in sheet.worksheets()]
+        naslovi = [model.tekst(getattr(w, "title", "")) for w in sheet.worksheets()]
     except Exception:                                   # noqa: BLE001
         return izlaz
     if not naslovi:

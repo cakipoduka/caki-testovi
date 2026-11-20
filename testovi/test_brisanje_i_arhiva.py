@@ -405,12 +405,27 @@ def test_objasnjenje_greske_u_exceptu_je_dopusteno(app_izvor):
 
 
 def test_brisanje_je_u_kartici_testovi(app_izvor):
-    """Dijalog brisanja mora stajati prije kartice 🧱 Složi test — tamo `_odabir_l` postoji."""
+    """Dijalog brisanja mora stajati prije kartice 🧱 Složi test — tamo `_odabir_l` postoji.
+
+    20.11.2026.: odabir više nije `selectbox` nego kartice u popisu, pa se traži mjesto gdje se
+    `_odabir_l` puni iz stanja sesije.
+    """
     brisanje = app_izvor.find('st.expander("🗑️ Obriši test")')
     slozi = app_izvor.find('if _akt == "🧱 Složi test":')
-    odabir = app_izvor.find("_odabir_l = st.selectbox")
+    odabir = app_izvor.find('st.session_state.get("v2_l_odabrani")')
     assert brisanje != -1, "dijalog brisanja nije nađen"
+    assert odabir != -1, "odabir testa se ne puni iz stanja sesije"
     assert 0 < odabir < brisanje < slozi
+
+
+def test_opseg_odabranog_testa_se_racuna_jednom(app_izvor):
+    """Zaglavlje i dijalog brisanja čitaju iste brojeve za ISTI test.
+
+    Dva poziva značila bi dvostruko čitanje šest tabova pri svakom crtanju kartice (kvota 429).
+    Poziv u bloku arhive nije duplikat — on računa opseg za druge, odabrane testove.
+    """
+    assert app_izvor.count("definicije.opseg_brisanja(_sheet(), _odabir_l)") == 1
+    assert "_opseg = _opseg_l" in app_izvor, "dijalog brisanja ne koristi već izračunat opseg"
 
 
 def test_app_zove_nove_funkcije(app_izvor):

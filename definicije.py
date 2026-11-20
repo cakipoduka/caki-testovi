@@ -550,7 +550,7 @@ def obrisi(sheet, definicija_id: str, *, korisnik: str = "",
                               f"{model.tekst(d.get('naziv'))}; dodjela obrisano: {obrisane_dodjele}")
     except Exception:                                   # noqa: BLE001
         pass
-    return True, (f"Test obrisan." + (f" Uz njega i {obrisane_dodjele} dodjela."
+    return True, ("Test obrisan." + (f" Uz njega i {obrisane_dodjele} dodjela."
                                       if obrisane_dodjele else ""))
 
 

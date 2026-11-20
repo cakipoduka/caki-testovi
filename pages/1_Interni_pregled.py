@@ -163,11 +163,13 @@ def _kartica(dodjela: dict, definicija: dict, pokusaj) -> None:
                             if _greska:
                                 st.warning(_greska + " Pošalji kao poveznicu ispod.")
                         radovi.dodaj_ucenikov_rad(
-                            st.session_state["_v2u_sheet"], pokusaj_id=_pid, ucenik_id=sifra,
+                            st.session_state["_v2u_sheet"], pokusaj_id=_pid,
+                            ucenik_id=model.tekst(dodjela.get("ucenik_id")),
                             veza=_veza or model.tekst(_link),
                             sadrzaj=(_datoteka.getvalue() if (_datoteka and not _veza) else None),
                             naziv=(_datoteka.name if _datoteka else "Poveznica"))
-                        posjete.zabiljezi(st.session_state["_v2u_sheet"], ucenik_id=sifra,
+                        posjete.zabiljezi(st.session_state["_v2u_sheet"],
+                                          ucenik_id=model.tekst(dodjela.get("ucenik_id")),
                                           radnja="rad", detalj=kljuc)
                         st.success("Rad je poslan profesoru. ✅")
                         st.rerun()

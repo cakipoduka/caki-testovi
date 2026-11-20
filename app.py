@@ -12,6 +12,7 @@ Ručno rješavanje (učenik) dolazi u Fazi B — tada se ovdje dodaje i pregled 
 
 SECRETS: GOOGLE_SERVICE_ACCOUNT_JSON, SHEET_ID (baza zadataka), CRM_SHEET_ID, APP_PASSWORD
 """
+import html
 import streamlit as st
 
 # Kategorije vrednovanja (UZV/RP/MK) — iste kao u v1 (`KATEGORIJE_INFO` u Test Builderu)
@@ -58,9 +59,11 @@ import vrijeme
 import uvoz_v1
 import caki_stil as stil  # 31.10.2026.: CAKI tema
 import caki_tema as tema  # noqa: E402  3.11.2026. (Claude, redizajn)
+import tema_testovi  # 20.11.2026.: komponente samo za ovaj repo (popis + detalj)
 
 st.set_page_config(page_title="CAKI — Testovi v2", page_icon="🧪", layout="wide")
 tema.primijeni()  # 3.11.2026.: tema kao CRM admin (IBM Plex Sans, plava #1d64b8) + traka kartica
+tema_testovi.primijeni()  # dodatak uz zajednicku temu, ne umjesto nje
 
 
 # ------------------------------------------------------------------ prijava
@@ -358,81 +361,133 @@ _akt = tema.nav(_KARTICE_TV, "tv")
 
 if _akt == "🧪 Testovi":
     upute.prikazi(st, "testovi")
-    st.caption("Popis testova i radnje. **Novi test slažeš u 🧱 Složi test.**")
 
-    # 20.11.2026. (Caki): arhiva = biblioteka predložaka. Uvoz iz v1 svaki stari test stvara
-    # sa statusom `arhiviran`, pa su gušili popis — sad se prikazuju na zahtjev.
+    # 20.11.2026. (Caki, po mockupu „CAKI Testovi v2"): popis lijevo, detalj desno.
+    # Prije je ovdje bila tablica svih testova, pa `selectbox` ispod nje: odabrani test nije se
+    # vidio u popisu, a radnje nad njim bile su dva zaslona niže. Sada se odabir vidi cijelo
+    # vrijeme (UX pravilo 3), a radnje stoje uz ono nad čim rade.
     _svi_testovi = _testovi()
     _arhiviranih = sum(1 for x in _svi_testovi
                        if model.tekst(x.get("status")) == "arhiviran")
-    _pokazi_arh = st.toggle(
-        f"🗄️ Prikaži i arhivirane ({_arhiviranih})", value=False, key="v2_l_arhiva",
-        help="Arhiva je biblioteka predložaka: stari i uvezeni testovi ostaju cijeli, a iz "
-             "njih se gumbom Uredi sadržaj pravi novi test.")
+
+    _zag1, _zag2 = st.columns([3, 2], vertical_alignment="bottom")
+    with _zag1:
+        st.markdown("### Testovi")
+        st.caption(f"{len(_svi_testovi)} testova · {_arhiviranih} u arhivi. "
+                   "**Novi test slažeš u 🧱 Složi test.**")
+    with _zag2:
+        _pokazi_arh = st.toggle(
+            f"🗄️ Prikaži i arhivirane ({_arhiviranih})", value=False, key="v2_l_arhiva",
+            help="Arhiva je biblioteka predložaka: stari i uvezeni testovi ostaju cijeli, a iz "
+                 "njih se gumbom Uredi sadržaj pravi novi test.")
+
     _testovi_lista = [x for x in _svi_testovi
                       if _pokazi_arh or model.tekst(x.get("status")) != "arhiviran"]
-    if not _testovi_lista:
-        if _arhiviranih:
-            st.info(f"Svi testovi ({_arhiviranih}) su u **arhivi** — uključi "
-                    "🗄️ Prikaži i arhivirane da ih vidiš i kopiraš.")
-        else:
-            st.info("Još nema testova → **🧱 Složi test** (odaberi zadatke → Spremi kao online test).")
-    else:
-        st.dataframe([{
-            "ID": model.tekst(x.get("definicija_id")),
-            "Naziv": model.tekst(x.get("naziv")),
-            "Status": model.tekst(x.get("status")),
-            "Zadataka": model.broj(x.get("broj_zadataka")),
-            "Bodova": model.broj(x.get("bodovi_ukupno")),
-            "Rok": f"{model.datum_hr(x.get('rok_od')) or '—'} – {model.datum_hr(x.get('rok_do')) or '—'}",
-            "Vrsta": definicije.VRSTA_NAZIV.get(model.tekst(x.get("vrsta")), ""),
-        } for x in _testovi_lista], hide_index=True, width="stretch")
 
-        st.divider()
-        st.divider()
-        _opcije_l = {model.tekst(x.get("definicija_id")): x for x in _testovi_lista}
-        _odabir_l = st.selectbox("Odaberi test za radnje", list(_opcije_l),
-                                 format_func=lambda i: f"{model.tekst(_opcije_l[i].get('naziv'))} · "
-                                                       f"{model.tekst(_opcije_l[i].get('status'))}",
-                                 key="v2_l_test")
+    if not _testovi_lista:
+        # UX pravilo 6: prazno stanje mora reći što napraviti, ne samo da je prazno.
+        if _arhiviranih:
+            tema.html_(tema_testovi.prazno(
+                f"Svi testovi ({_arhiviranih}) su u arhivi",
+                "Uključi 🗄️ Prikaži i arhivirane da ih vidiš, vratiš ili kopiraš."))
+        else:
+            tema.html_(tema_testovi.prazno(
+                "Još nema nijednog testa",
+                "Otvori 🧱 Složi test, odaberi zadatke i spremi ih kao online test."))
+    else:
+        _lijevo, _desno = st.columns([2, 3], gap="medium")
+
+        # ================================================================ POPIS (lijevo)
+        with _lijevo:
+            _trazi_l = st.text_input("Traži po nazivu ili ID-u", key="v2_l_trazi",
+                                     placeholder="npr. kvadratna, T26-00…")
+            _pojam_l = model.tekst(_trazi_l).strip().lower()
+            _vidljivi_l = [x for x in _testovi_lista
+                           if not _pojam_l
+                           or _pojam_l in model.tekst(x.get("naziv")).lower()
+                           or _pojam_l in model.tekst(x.get("definicija_id")).lower()]
+
+            _opcije_l = {model.tekst(x.get("definicija_id")): x for x in _testovi_lista}
+            # Odabir preživi ponovno crtanje. Ako je test u međuvremenu obrisan ili je pao
+            # izvan filtra arhive, uzmi prvi s popisa umjesto da ekran pukne.
+            _odabir_l = model.tekst(st.session_state.get("v2_l_odabrani"))
+            if _odabir_l not in _opcije_l:
+                _odabir_l = (model.tekst(_vidljivi_l[0].get("definicija_id"))
+                             if _vidljivi_l else next(iter(_opcije_l)))
+                st.session_state["v2_l_odabrani"] = _odabir_l
+
+            if not _vidljivi_l:
+                st.caption(f"Nijedan test ne odgovara pojmu „{_trazi_l}”. "
+                           "Obriši pojam da vidiš sve.")
+
+            for _x in _vidljivi_l:
+                _xid = model.tekst(_x.get("definicija_id"))
+                _odabran_x = _xid == _odabir_l
+                _natpis_x, _vrsta_x = tema_testovi.status_natpis(_x.get("status"))
+                _rok_x = (f"{model.datum_hr(_x.get('rok_od')) or '—'} – "
+                          f"{model.datum_hr(_x.get('rok_do')) or '—'}")
+                with tema.kutija(f"tt_{'odabran' if _odabran_x else 'stavka'}_{_xid}"):
+                    tema.html_(tema_testovi.stavka(
+                        naziv=model.tekst(_x.get("naziv")),
+                        oznaka=_xid,
+                        status_html=tema.chip(_natpis_x, _vrsta_x),
+                        meta=f"{model.broj(_x.get('broj_zadataka'))} zadataka · "
+                             f"{model.broj(_x.get('bodovi_ukupno'))} bodova · rok {_rok_x}"))
+                    # UX pravilo 2: gumb, ne kvadratić — velika meta i jasan ishod.
+                    if _odabran_x:
+                        st.button("✓ Odabrano", key=f"v2_l_odab_{_xid}", disabled=True,
+                                  width="stretch")
+                    else:
+                        st.button("Odaberi", key=f"v2_l_odab_{_xid}", width="stretch",
+                                  on_click=st.session_state.__setitem__,
+                                  args=("v2_l_odabrani", _xid))
+
         _d_l = _opcije_l[_odabir_l]
         # 20.11.2026.: `_status_l` je bio korišten, a nigdje postavljen → NameError na gumbu
         # Deaktiviraj/Aktiviraj (vidjelo se samo ako uređivanje nije bilo zaključano).
         _status_l = model.tekst(_d_l.get("status"))
-        # ---------------------------------------------------------------- ✏️ UREDI TEST (v1 obrazac)
-        with st.expander("✏️ Uredi test (naziv, trajanje, rok, AI pomoć)"):
-            try:
-                # 20.11.2026.: dvije razine — okvirni podaci (naziv/rok/trajanje/AI) i zadaci.
-                _smije_m, _zasto_m = definicije.smije_urediti_metapodatke(_sheet(), _d_l)
-                _smije_z, _zasto_z = definicije.smije_urediti(_sheet(), _d_l)
+        # Jedan poziv za cijelu karticu: i zaglavlje i dijalog brisanja čitaju iste brojeve.
+        _opseg_l = definicije.opseg_brisanja(_sheet(), _odabir_l)
+
+        # ================================================================ DETALJ (desno)
+        with _desno:
+            _natpis_d, _vrsta_d = tema_testovi.status_natpis(_status_l)
+            with tema.kutija("tt_zaglavlje"):
+                tema.html_(tema_testovi.naslov(
+                    naziv=model.tekst(_d_l.get("naziv")),
+                    oznaka=_odabir_l,
+                    cipovi_html=(tema.chip(_natpis_d, _vrsta_d)
+                                 + tema.chip(definicije.VRSTA_NAZIV.get(
+                                     model.tekst(_d_l.get("vrsta")), "—"))),
+                    brojevi_html=tema_testovi.brojevi(
+                        (model.broj(_d_l.get("broj_zadataka")), "zadataka"),
+                        (model.broj(_d_l.get("bodovi_ukupno")), "bodova"),
+                        (_opseg_l["pokusaji"], "pokušaja"))))
+
+                try:
+                    _smije_m, _zasto_m = definicije.smije_urediti_metapodatke(_sheet(), _d_l)
+                    _smije_z, _zasto_z = definicije.smije_urediti(_sheet(), _d_l)
+                except Exception as _e_z:               # noqa: BLE001
+                    _smije_m, _zasto_m = True, ""
+                    _smije_z, _zasto_z = False, f"provjera nije dostupna: {_e_z}"
+
                 if _status_l == "arhiviran":
-                    st.info("🗄️ **Test je u arhivi** — tu stoji kao predložak: ne mijenja "
-                            "se i nitko ga ne rješava. Vrati ga iz arhive ako ga želiš "
-                            "mijenjati, ili ga kopiraj i uredi kao novi test.")
-                    _r1, _r2 = st.columns(2)
-                    if _r1.button("↩️ Vrati iz arhive", key=f"v2_ur_vrati_{_odabir_l}"):
-                        _ok_v, _raz_v = definicije.vrati_iz_arhive(
-                            _sheet(), _odabir_l, korisnik="caki")
-                        if _ok_v:
-                            st.success(_raz_v)
-                            _osvjezi()
-                        else:
-                            st.error(_raz_v)
-                    if _r2.button("✏️ Uredi sadržaj (kao novi test)", type="primary",
-                                  key=f"v2_ur_kopiraj_arh_{_odabir_l}"):
-                        _koliko = _u_slozi_test(_d_l)
-                        st.success(f"Učitano {_koliko} zadataka u 🧱 Složi test.")
-                        st.rerun()
-                elif not _smije_m:
-                    st.warning(f"Uređivanje nije moguće: {_zasto_m}")
-                else:
-                    if not _smije_z:
-                        st.info(f"**Zadaci su zaključani:** {_zasto_z}  \n"
-                                "Naziv, rok, trajanje i AI pomoć **smiješ** mijenjati "
-                                "ispod. Za promjenu zadataka koristi ✏️ Uredi sadržaj "
-                                "(kao novi test).")
-                    elif _zasto_z.startswith("⚠️"):
-                        st.warning(_zasto_z)
+                    tema.html_(tema_testovi.poruka("o", (
+                        "<b>Test je u arhivi</b> — stoji kao predložak: ne mijenja se i nitko "
+                        "ga ne rješava. Vrati ga iz arhive ako ga želiš mijenjati, ili ga "
+                        "kopiraj i uredi kao novi test."), "🗄️"))
+                elif not _smije_z:
+                    tema.html_(tema_testovi.poruka("b", (
+                        f"<b>Zadaci su zaključani</b> — {html.escape(_zasto_z)} "
+                        "Naziv, rok, trajanje i AI pomoć mijenjaš normalno; za sadržaj "
+                        "upotrijebi <b>Uredi sadržaj (kao novi test)</b>."), "🔒"))
+                elif _zasto_z.startswith("⚠️"):
+                    tema.html_(tema_testovi.poruka("o", html.escape(_zasto_z), "⚠️"))
+
+            # ---------------------------------------------------------- okvirni podaci
+            if _status_l != "arhiviran" and _smije_m:
+                with tema.kutija("tt_podaci"):
+                    st.markdown("##### Okvirni podaci")
                     with st.form(f"v2_ur_forma_{_odabir_l}"):
                         _c1, _c2 = st.columns([3, 1])
                         _naziv_u = _c1.text_input("Naziv testa (vidi ga učenik)",
@@ -447,9 +502,8 @@ if _akt == "🧪 Testovi":
                         _do_u = _c4.date_input("Otvoren do",
                                                value=definicije._danas(_d_l.get("rok_do")),
                                                format="DD.MM.YYYY")
-                        _akt_u = _c5.checkbox(
-                            "Aktivan (učenik ga vidi)",
-                            value=model.tekst(_d_l.get("status")) == "objavljen")
+                        _akt_u = _c5.checkbox("Aktivan (učenik ga vidi)",
+                                              value=_status_l == "objavljen")
                         _ai_u = st.checkbox(
                             "💡 Pomoć pri učenju dopuštena (bot kao profesor; nikad rješenje)",
                             value=model.tekst(_d_l.get("ai_pomoc")).lower() == "da")
@@ -468,25 +522,64 @@ if _akt == "🧪 Testovi":
                                 _osvjezi()
                             else:
                                 st.error(_raz_u)
+            elif not _smije_m:
+                tema.html_(tema_testovi.poruka("o", html.escape(_zasto_m), "⚠️"))
 
-                    _b1, _b2, _b3 = st.columns(3)
-                    if _b1.button("⏸️ Deaktiviraj" if _status_l == "objavljen" else "✅ Aktiviraj",
-                                  key=f"v2_ur_akt_{_odabir_l}"):
-                        _ok_a, _raz_a = definicije.postavi_aktivan(
-                            _sheet(), _odabir_l, _status_l != "objavljen", korisnik="caki")
-                        if _ok_a:
-                            st.success(_raz_a)
+            # ---------------------------------------------------------- Student View
+            with tema.kutija("tt_pogled"):
+                st.markdown("##### Što učenik vidi")
+                tema.html_('<p class="tt-sv-opis">Za rješenja i video „pri predaji” znači '
+                           '<b>nakon isteka roka</b> — tko prvi preda ne smije podijeliti '
+                           'odgovore. Postavlja se pri objavi u 👥 Objavi.</p>')
+                try:
+                    # UX pravilo 5: čovjeku ide „poslije roka", ne sirovo `pri_predaji`.
+                    _boje_sv = {"nikad": "", "pri_predaji": "b", "uvijek": "g"}
+                    _redci_sv = definicije.sto_vidi(_d_l.get("student_view_json"))
+                    tema.html_("".join(
+                        tema.redak(
+                            f'<b class="tt-sv">{html.escape(model.tekst(_r.get("naziv")))}</b>',
+                            tema.chip(model.tekst(_r.get("znaci")),
+                                      _boje_sv.get(model.tekst(_r.get("stupanj")), "")))
+                        for _r in _redci_sv) or '<p class="kc-prazno">Nije postavljeno.</p>')
+                except Exception as _e_sv:              # noqa: BLE001
+                    st.caption(f"Student View trenutno nije dostupan: {_e_sv}")
+
+            # ---------------------------------------------------------- radnje
+            with tema.kutija("tt_radnje"):
+                st.markdown("##### Radnje")
+                if _status_l == "arhiviran":
+                    _r1, _r2 = st.columns(2)
+                    if _r1.button("↩️ Vrati iz arhive", key=f"v2_ur_vrati_{_odabir_l}",
+                                  width="stretch"):
+                        _ok_v, _raz_v = definicije.vrati_iz_arhive(
+                            _sheet(), _odabir_l, korisnik="caki")
+                        if _ok_v:
+                            st.success(_raz_v)
                             _osvjezi()
                         else:
-                            st.error(_raz_a)
-                    if _b2.button("📄 Kloniraj", key=f"v2_ur_klon_{_odabir_l}"):
+                            st.error(_raz_v)
+                    if _r2.button("✏️ Uredi sadržaj (kao novi test)", type="primary",
+                                  key=f"v2_ur_kopiraj_arh_{_odabir_l}", width="stretch"):
+                        _koliko = _u_slozi_test(_d_l)
+                        st.success(f"Učitano {_koliko} zadataka u 🧱 Složi test.")
+                        st.rerun()
+                else:
+                    if st.button("✏️ Uredi sadržaj (kao novi test)", type="primary",
+                                 key=f"v2_ur_kopiraj_{_odabir_l}", width="stretch"):
+                        _koliko = _u_slozi_test(_d_l)
+                        st.success(f"Učitano {_koliko} zadataka u 🧱 Složi test.")
+                        st.rerun()
+                    _b1, _b2, _b3 = st.columns(3)
+                    if _b1.button("📄 Kloniraj", key=f"v2_ur_klon_{_odabir_l}",
+                                  width="stretch"):
                         _novi, _raz_k = definicije.kloniraj(_sheet(), _odabir_l, autor="caki")
                         if _novi:
                             st.success(_raz_k)
                             _osvjezi()
                         else:
                             st.error(_raz_k)
-                    if _b3.button("🗄️ Arhiviraj", key=f"v2_ur_arh_{_odabir_l}"):
+                    if _b2.button("🗄️ Arhiviraj", key=f"v2_ur_arh_{_odabir_l}",
+                                  width="stretch"):
                         _ok_r, _raz_r = definicije.arhiviraj(_sheet(), _odabir_l,
                                                              korisnik="caki")
                         if _ok_r:
@@ -494,14 +587,18 @@ if _akt == "🧪 Testovi":
                             _osvjezi()
                         else:
                             st.error(_raz_r)
-                    _s1, _s2 = st.columns([1, 2])
-                    if _s1.button("✏️ Uredi sadržaj (kao novi test)", type="primary",
-                                  key=f"v2_ur_kopiraj_{_odabir_l}"):
-                        _koliko = _u_slozi_test(_d_l)
-                        st.success(f"Učitano {_koliko} zadataka u 🧱 Složi test.")
-                        st.rerun()
-                    _s2.caption("Kloniranje, arhiviranje i uređivanje sadržaja ne diraju "
-                                "predane rezultate — sadržaj se uređuje kao NOVI test.")
+                    if _b3.button("⏸️ Deaktiviraj" if _status_l == "objavljen"
+                                  else "✅ Aktiviraj", key=f"v2_ur_akt_{_odabir_l}",
+                                  width="stretch"):
+                        _ok_a, _raz_a = definicije.postavi_aktivan(
+                            _sheet(), _odabir_l, _status_l != "objavljen", korisnik="caki")
+                        if _ok_a:
+                            st.success(_raz_a)
+                            _osvjezi()
+                        else:
+                            st.error(_raz_a)
+                    st.caption("Kloniranje, arhiviranje i uređivanje sadržaja ne diraju "
+                               "predane rezultate — sadržaj se uređuje kao NOVI test.")
                     with st.popover("⏹️ Zatvori test odmah"):
                         st.caption("Rok se postavlja na **jučer**: nitko novi ne može pisati, "
                                    "a predani odmah vide rješenja.")
@@ -514,8 +611,6 @@ if _akt == "🧪 Testovi":
                                 _osvjezi()
                             else:
                                 st.error(_raz_z)
-            except Exception as _e_u:                   # noqa: BLE001
-                st.caption(f"Uređivanje trenutno nije dostupno: {_e_u}")
 
         # ---------------------------------------------------------------- 🗑️ OBRIŠI TEST
         # 20.11.2026.: brisanje je dotad imalo DVA expandera, oba u kartici 🧱 Složi test i oba
@@ -524,7 +619,7 @@ if _akt == "🧪 Testovi":
         # Zato: jedno mjesto, ovdje, uz ostale radnje nad odabranim testom.
         with st.expander("🗑️ Obriši test"):
             try:
-                _opseg = definicije.opseg_brisanja(_sheet(), _odabir_l)
+                _opseg = _opseg_l       # već izračunat gore; drugi poziv bi iznova čitao 6 tabova
                 st.caption(f"**{_opseg['naziv'] or '—'}** (`{_odabir_l}`) · "
                            f"status `{_opseg['status'] or '—'}`")
 
@@ -1852,7 +1947,7 @@ if _akt == "📊 Rezultati":
                     })
                 st.download_button("⬇ CSV — uspjeh po zadatku",
                                    analiza_rezultata.csv(_pz),
-                                   file_name=f"uspjeh_zadaci_{_odabir_r}.csv",
+                                   file_name=f"uspjeh_zadaci_{odabir_r}.csv",
                                    mime="text/csv", key="v2_ar_csv_zad")
         with st.expander("📚 Uspjeh po cjelinama (najslabija prva)"):
             _pc = analiza_rezultata.po_cjelinama(_zad_ar, _ocj_ar)
@@ -1862,7 +1957,7 @@ if _akt == "📊 Rezultati":
                 st.dataframe(_pc, hide_index=True, width="stretch")
                 st.download_button("⬇ CSV — uspjeh po cjelinama",
                                    analiza_rezultata.csv(_pc),
-                                   file_name=f"uspjeh_cjeline_{_odabir_r}.csv",
+                                   file_name=f"uspjeh_cjeline_{odabir_r}.csv",
                                    mime="text/csv", key="v2_ar_csv_cj")
         with st.expander("⏳ Započeli, nisu predali"):
             _zn = analiza_rezultata.zapoceli_nisu_predali(pok, dod)
@@ -2275,7 +2370,7 @@ if _akt == "⚙️ Postavke":
                     f"uvoz · {len(_nacrt['preskoceno'])} preskočeno · "
                     f"{len(_nacrt['ocjene'])} ocjena po zadatku")
                 st.caption(f"Definicija: `{_nacrt['definicija_id']}`"
-                           + (f" (već postoji — dodaju se samo učenici koji fale)"
+                           + (" (već postoji — dodaju se samo učenici koji fale)"
                               if _nacrt.get("vec_uvezeno") else " (nova, ide u arhiv)"))
                 if _nacrt["ucenici"]:
                     st.dataframe(

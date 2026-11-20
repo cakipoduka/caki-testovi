@@ -72,6 +72,8 @@
 | `prijevod.py` | 🌐 prijevod odabranih zadataka (online test i PDF), baza se ne mijenja | `model` |
 | `predlosci.py` | 📁 predlošci testa i nacrt — isti format kao v1 | `model`, `tablice` |
 | `brend.py` | 🎨 podaci tvrtke za izvještaje — jedino mjesto koje Caki uređuje | — |
+| `caki_tema.py` | zajednička tema portala — **ISTA datoteka u 4 repoa**, ne dopunjavati je ovdje | `streamlit` |
+| `tema_testovi.py` | izgled ekrana koji postoje samo ovdje (popis + detalj kartice 🧪 Testovi); čiste funkcije koje grade HTML | `streamlit` |
 | `samoprovjera.py` | 🩺 popis već riješenih problema, provjera u živoj verziji | `model` |
 | `skupine.py` | skupine zadataka (uvod + a,b,c) — preuzeto iz v1 `skupine_zadataka.py` | `model` |
 | `pdf_test.py` | 📄 PDF testa za ispis (zaglavlje, uputa, zadaci, slike) | `model`, `reportlab` |

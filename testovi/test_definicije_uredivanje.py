@@ -7,7 +7,7 @@ Pokriva ono što je Caki 20.11.2026. prijavio kao blokadu:
   · arhiva mora biti povratna (`vrati_iz_arhive`), inače su uvezeni v1 testovi zaključani zauvijek,
   · u `app.py`: `_status_l` mora biti postavljen prije upotrebe (prije je bio NameError).
 
-Pokreni:  python -m pytest testovi/test_definicije_uredivanje.py -q   (iz mape caki-testovi)
+Pokreni (iz mape `caki-testovi`):  python -m pytest testovi -q
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ import sys
 
 import pytest
 
-# 20.11.2026.: datoteka je preseljena iz `CAKI_razvoj/testovi/` u repo, pa je korijen sam repo.
-# `sys.path` sada postavlja `conftest.py`; ovo ostaje da test radi i ako se pokrene izravno.
+# Testovi su unutar repoa (dogovor 20.11.2026.), pa je korijen repoa jedna razina iznad.
+# Put u `sys.path` postavlja `conftest.py` u ovoj mapi; ovdje ga drzimo za citanje `app.py`.
 REPO = pathlib.Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))

@@ -352,7 +352,9 @@ def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
       2. **postoji ijedan pokušaj** (u tijeku ili predan) → **ne** — bez obzira na status, jer bi
          učenici dobili drugi test od onoga što su počeli (dokaz se ne može rekonstruirati);
       3. **nacrt / zatvoren bez pokušaja** → da;
-      4. **objavljen, rok nije počeo** → da; **rok je počeo** → ne.
+      4. **objavljen, rok nije počeo** → da; **rok je počeo, a nitko nije otvorio test**
+         → **da** (20.11.2026., Caki: prije je ovdje bilo `ne`, pa se test nije mogao
+         popraviti ni kad ga nitko nije ni vidio).
     """
     d = definicija or {}
     did = model.tekst(d.get("definicija_id"))
@@ -377,10 +379,76 @@ def smije_urediti(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
     od, _do = rok_dijela(d)
     danas = _danas(danas)
     if od and danas and danas >= od:
-        return False, f"Rok je počeo {model.datum_hr(od)} — učenici ga mogu rješavati."
+        # 20.11.2026. (Caki): prije je ovdje stajao `return False` i test se nije mogao
+        # popraviti ni kad ga NITKO nije otvorio. Dokaz čuva `Pokusaji.zadaci_json` (snimka
+        # pitanja koja je učenik stvarno vidio), a bez ijednog pokušaja nema što pokvariti.
+        return True, (f"⚠️ Rok je počeo {model.datum_hr(od)}, ali **nitko nije otvorio test** — "
+                      "smije se mijenjati. Tko ga počne poslije izmjene, dobiva novu "
+                      "verziju.")
     return True, ("Rok još nije počeo — smije se mijenjati."
                   if od else "Bez roka i bez pokušaja — smije se mijenjati.")
 
+
+
+META_POLJA = ("naziv", "trajanje_min", "rok_od", "rok_do", "ai_pomoc", "napomena", "status")
+
+
+def smije_urediti_metapodatke(sheet, definicija: dict, *, danas=None) -> tuple[bool, str]:
+    """Smiju li se mijenjati OKVIRNI podaci testa (`META_POLJA`): naziv, trajanje, rok, AI?
+
+    Razlika prema `smije_urediti` (ona čuva ZADATKE): ovdje se zadaci ne diraju, pa pokušaji
+    ne blokiraju. Produljiti rok testu koji učenici pišu je normalan posao, a ne kvarenje
+    dokaza (20.11.2026., Caki: prije je obrazac bio zaključan skroz).
+
+      1. **arhiviran** → ne (prvo "Vrati iz arhive");
+      2. sve ostalo → da; ako ima pokušaja, poruka je upozorenje, ne zabrana.
+    """
+    d = definicija or {}
+    if model.tekst(d.get("status")) == "arhiviran":
+        return False, "Test je u arhivi — vrati ga iz arhive pa ga onda mijenjaj."
+    pokusaji = pokusaji_testa(sheet, model.tekst(d.get("definicija_id")))
+    if pokusaji:
+        return True, (f"⚠️ Test ima **{len(pokusaji)} pokušaja** — smiju se mijenjati naziv, "
+                      "rok, trajanje i AI pomoć, ali **ne zadaci**.")
+    return True, "Nema pokušaja — okvirni podaci se mijenjaju slobodno."
+
+
+def arhiviraj(sheet, definicija_id: str, *, korisnik: str = "") -> tuple[bool, str]:
+    """🗄️ U arhivu (biblioteka predložaka): test se ne zadaje i ne mijenja, ali ostaje cijel.
+
+    Arhiva NIJE brisanje — dodjele, pokušaji i ocjene ostaju. Iz arhive se test kopira u
+    🧱 Složi test i uredi kao novi, ili se vrati natrag s `vrati_iz_arhive`.
+    """
+    did = model.tekst(definicija_id)
+    d = po_id(sheet, did)
+    if not d:
+        return False, "Test ne postoji."
+    if model.tekst(d.get("status")) == "arhiviran":
+        return False, "Test je već u arhivi."
+    if not promijeni_status(sheet, did, "arhiviran", korisnik=korisnik or "caki"):
+        return False, "Status nije upisan (redak nije nađen)."
+    return True, f"Test `{did}` je u arhivi — ostaje kao predložak, učenicima nije dostupan."
+
+
+def vrati_iz_arhive(sheet, definicija_id: str, *, korisnik: str = "",
+                    novi_status: str = "zatvoren") -> tuple[bool, str]:
+    """↩️ Iz arhive natrag u rad. Zadano `zatvoren`: Caki ga vidi i smije mijenjati, učenik ne.
+
+    Namjerno NE ide odmah u `objavljen` — objava znači dodjele i ide kroz 👥 Objavi.
+    Arhiviranje je time povratno: arhiva iz koje se ne može natrag bila bi zamka.
+    """
+    did = model.tekst(definicija_id)
+    d = po_id(sheet, did)
+    if not d:
+        return False, "Test ne postoji."
+    if model.tekst(d.get("status")) != "arhiviran":
+        return False, "Test nije u arhivi."
+    if novi_status not in ("nacrt", "zatvoren"):
+        return False, "Iz arhive se vraća kao `nacrt` ili `zatvoren`."
+    if not promijeni_status(sheet, did, novi_status, korisnik=korisnik or "caki"):
+        return False, "Status nije upisan (redak nije nađen)."
+    return True, (f"Test `{did}` je vraćen iz arhive (status `{novi_status}`) — sad se smije "
+                  "mijenjati; za učenike ga objavi u 👥 Objavi.")
 
 
 def obrisi(sheet, definicija_id: str, *, korisnik: str = "",
@@ -435,19 +503,21 @@ def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "") -> 
     """Izmijeni test kakav ga učenik vidi (kao v1 `testovi_admin` L2071–2121).
 
     Dopuštena polja: `naziv`, `trajanje_min`, `rok_od`, `rok_do`, `ai_pomoc`, `napomena`, `status`.
-    **Ne mijenja** zadatke (`zadaci_json`) — to je drugi posao. Blokira se ako test ima pokušaja
-    (`smije_urediti`).
+    **Ne mijenja** zadatke (`zadaci_json`) — to je drugi posao. Zato se blokira samo ako je
+    test arhiviran (`smije_urediti_metapodatke`); pokušaji NE blokiraju okvirne podatke.
     """
     d = definicija or {}
     did = model.tekst(d.get("definicija_id"))
     if not did:
         return False, "Nedostaje ID testa."
 
-    smije, razlog = smije_urediti(sheet, d)
+    # 20.11.2026.: ova funkcija NIKAD ne dira `zadaci_json`, pa je dovoljna provjera okvirnih
+    # podataka — test s pokušajima smije dobiti novi rok ili naziv.
+    smije, razlog = smije_urediti_metapodatke(sheet, d)
     if not smije:
         return False, razlog
 
-    dopusteno = ("naziv", "trajanje_min", "rok_od", "rok_do", "ai_pomoc", "napomena", "status")
+    dopusteno = META_POLJA
     polja = {k: v for k, v in (promjene or {}).items() if k in dopusteno}
     if not polja:
         return False, "Nema dopuštenih polja za izmjenu."

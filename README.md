@@ -3,7 +3,9 @@
 **Nova generacija sustava testiranja.** Paralelni razvoj — stara tri repoa (`caki-baza-zadataka`,
 `caki-booking-termina`, `caki-upisi-crm-main`) **se ne diraju** i rade dalje.
 
-Gradi se po `CAKI_razvoj/upute/MASTER_SUSTAV_TESTIRANJA.md` (v2.0).
+Izvor istine je **`upute/ARHITEKTURA.md`** (odluka 20.11.2026.).
+Raniji `CAKI_razvoj/upute/MASTER_SUSTAV_TESTIRANJA.md` (v2.0) nestao je s kvarom laptopa —
+bio je izvan gita. Objašnjenje je na vrhu `upute/ARHITEKTURA.md`.
 
 > 📚 **Arhiva razvoja je u mapi `upute/` unutar ovog repoa** — izvještaji po isporuci, kratke upute,
 > arhitektura i dnevnik. Počni od `upute/00_PREGLED.md`.

@@ -2,6 +2,19 @@
 
 **Kratki pregled strukture.** Ažurirati kad se doda modul ili promijeni model podataka.
 
+> ## ⚠️ Ovo je IZVOR ISTINE za sustav testiranja (odluka 20.11.2026.)
+>
+> Raniji dokumenti upućuju na `CAKI_razvoj/upute/MASTER_SUSTAV_TESTIRANJA.md` (v2.0).
+> **Te datoteke više nema** — bila je u `upute/`, izvan gita, i nestala je s kvarom laptopa u
+> studenom 2026.; Drive kopija je od 12.10., a dokument je nastao oko 25.10.
+>
+> Caki je 20.11.2026. odlučio: **`ARHITEKTURA.md` (ova datoteka) preuzima ulogu izvora istine**
+> za `caki-testovi`. Uz nju vrijede `STATUS.md` (što radi danas), `PREOSTALO_IZ_STAROG.md`
+> (što još treba preuzeti iz starog buildera) i `UPDATE_*.md` (povijest po isporuci).
+>
+> Ako se original ikad pronađe u staroj Drive arhivi, spojiti ga ovamo i obrisati ovu napomenu —
+> ne držati dva dokumenta koja tvrde isto.
+
 ---
 
 ## 1. Pravila koja se ne krše

@@ -528,13 +528,44 @@ if _akt == "🧪 Testovi":
             # ---------------------------------------------------------- Student View
             with tema.kutija("tt_pogled"):
                 st.markdown("##### Što učenik vidi")
-                tema.html_('<p class="tt-sv-opis">Za rješenja i video „pri predaji” znači '
+                tema.html_('<p class="tt-sv-opis">Za rješenja i video „Poslije” znači '
                            '<b>nakon isteka roka</b> — tko prvi preda ne smije podijeliti '
-                           'odgovore. Postavlja se pri objavi u 👥 Objavi.</p>')
+                           'odgovore. Za ostalo „Poslije” znači čim učenik preda.</p>')
                 try:
                     # UX pravilo 5: čovjeku ide „poslije roka", ne sirovo `pri_predaji`.
                     _boje_sv = {"nikad": "", "pri_predaji": "b", "uvijek": "g"}
                     _redci_sv = definicije.sto_vidi(_d_l.get("student_view_json"))
+
+                    # 20.11.2026.: dosad se Student View samo PRIKAZIVAO; sada se i mijenja,
+                    # po testu. Arhiviran test ostaje samo za čitanje.
+                    if _status_l != "arhiviran":
+                        with st.form(f"v2_sv_forma_{_odabir_l}"):
+                            _novi_sv = {}
+                            for _r_sv in _redci_sv:
+                                _k_sv = model.tekst(_r_sv.get("kljuc"))
+                                _tren_sv = model.tekst(_r_sv.get("stupanj"))
+                                _razine = list(definicije.STUPNJEVI)
+                                _novi_sv[_k_sv] = st.radio(
+                                    model.tekst(_r_sv.get("naziv")), _razine,
+                                    index=_razine.index(_tren_sv) if _tren_sv in _razine else 0,
+                                    horizontal=True,
+                                    format_func=lambda s: definicije.STUPANJ_NAZIV.get(s, s),
+                                    key=f"v2_sv_{_odabir_l}_{_k_sv}")
+                            if st.form_submit_button("💾 Spremi što učenik vidi",
+                                                     type="primary"):
+                                _ok_sv, _raz_sv = definicije.postavi_student_view(
+                                    _sheet(), _d_l, _novi_sv, korisnik="caki")
+                                if _ok_sv:
+                                    st.success(_raz_sv)
+                                    _osvjezi()
+                                else:
+                                    st.error(_raz_sv)
+                        if (model.tekst(_novi_sv.get("rjesenja")) == "uvijek"
+                                or model.tekst(_novi_sv.get("video")) == "uvijek"):
+                            tema.html_(tema_testovi.poruka("o", (
+                                "Rješenja ili video stoje na <b>Uvijek</b> — učenik ih vidi i "
+                                "prije nego počne pisati, pa odgovori kruže prije roka."), "⚠️"))
+                        st.caption("Trenutno spremljeno:")
                     tema.html_("".join(
                         tema.redak(
                             f'<b class="tt-sv">{html.escape(model.tekst(_r.get("naziv")))}</b>',

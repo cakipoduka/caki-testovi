@@ -59,7 +59,7 @@
 | `slike_zadataka.py` | slika uz zadatak iz Drivea (bez novog paketa, keš u memoriji) | `google-auth`, `requests` |
 | `ai_pomoc.py` | 💡 pomoć: pravila „bez rješenja", max 3 pitanja, DeepSeek/Anthropic | `model` |
 | `analitika.py` | mjerenje kvalitete: p, diskriminativnost, distraktori, Cronbach α, preporuke | `model` |
-| `pages/1_Ucenik.py` | **stranica učenika**: prijava šifrom, popis testova, rješavanje, pregled | svi |
+| `pages/1_Interni_pregled.py` | **stranica učenika**: prijava šifrom, popis testova, rješavanje, pregled — ⚠️ 20.11.2026.: ovdje je do danas pisalo `pages/1_Ucenik.py`, datoteka se tako NE zove; ime odlučuje i natpis u Streamlitovu izborniku stranica, v. otvoreno pitanje u `UPDATE_20-11_pregled_i_student_view.md` | svi |
 | `radovi.py` | 📷 radovi na papiru: prilog učenika ili profesora, potvrda pregleda (tab `Radovi`) | `model`, `tablice` |
 | `drive.py` | upload skena u Drive (25 MB limit, fallback na poveznicu) | `google-api-python-client` |
 | `posjete.py` | 👀 praćenje pristupa: posjeta/test/rad, **jednom po sesiji** (kvota) | `model`, `tablice` |

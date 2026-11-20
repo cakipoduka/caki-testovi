@@ -604,6 +604,59 @@ def izmijeni(sheet, definicija: dict, promjene: dict, *, korisnik: str = "") -> 
     return bool(ok), "Spremljeno." if ok else "Redak nije nađen."
 
 
+def postavi_student_view(sheet, definicija: dict, izbor: dict,
+                         *, korisnik: str = "") -> tuple[bool, str]:
+    """Postavi što učenik vidi — po testu. Vraća (uspjeh, poruka).
+
+    **Zašto zasebna funkcija, a ne `izmijeni()`:** `student_view_json` namjerno nije u
+    `META_POLJA`. `izmijeni()` upisuje vrijednosti kakve dobije, a ovdje to ne valja — nepoznat
+    resurs ili razina ne smiju doći do baze, jer bi ih `_view_iz_jsona()` tiho preskočio i
+    učeniku bi se, bez ijedne greške, prikazalo nešto drugo nego što je profesor postavio.
+    Zato se najprije provjeri svaki ključ i svaka razina, pa tek onda serijalizira.
+
+    **Pokušaji NE blokiraju ovu izmjenu.** Otvoriti rješenja nakon isteka roka normalan je
+    posao i ne dira ni jedan predani odgovor. Arhiviran test se ne mijenja — ista provjera kao
+    za okvirne podatke (`smije_urediti_metapodatke`).
+    """
+    d = definicija or {}
+    did = model.tekst(d.get("definicija_id"))
+    if not did:
+        return False, "Nedostaje ID testa."
+
+    smije, razlog = smije_urediti_metapodatke(sheet, d)
+    if not smije:
+        return False, razlog
+
+    trazeno = izbor or {}
+    if not isinstance(trazeno, dict):
+        return False, "Očekivan je rječnik resurs → razina."
+    for kljuc, vrijednost in trazeno.items():
+        if kljuc not in RESURSI:
+            return False, (f"Nepoznat resurs `{model.tekst(kljuc)}`. "
+                           f"Dopušteni su: {', '.join(RESURSI)}.")
+        if model.tekst(vrijednost) not in STUPNJEVI:
+            return False, (f"Nepoznata razina `{model.tekst(vrijednost)}` za `{kljuc}`. "
+                           f"Dopuštene su: {', '.join(STUPNJEVI)}.")
+
+    # Krene se od onoga što je već zapisano, pa se promijeni samo ono što je poslano —
+    # tako djelomičan izbor ne obriše ostale resurse.
+    novi = _view_iz_jsona(d.get("student_view_json"))
+    for kljuc, vrijednost in trazeno.items():
+        novi[kljuc] = model.tekst(vrijednost)
+
+    if not tablice.azuriraj(sheet, tablice.TAB_DEFINICIJE, "definicija_id", did,
+                            {"student_view_json": model.u_json(novi)}):
+        return False, "Postavke nisu upisane (redak nije nađen)."
+
+    try:
+        tablice.zapisi_radnju(
+            sheet, korisnik or "caki", "student_view", did,
+            ", ".join(f"{k}={novi[k]}" for k in RESURSI))
+    except Exception:                                   # noqa: BLE001
+        pass
+    return True, "Spremljeno — učenici od sada vide točno ovo."
+
+
 def postavi_aktivan(sheet, definicija_id: str, aktivan: bool, *, korisnik: str = "") -> tuple[bool, str]:
     """v1 „Aktivan / Deaktiviraj": učenik ga vidi ili ne (rezultati ostaju)."""
     d = po_id(sheet, definicija_id)

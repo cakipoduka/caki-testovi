@@ -34,3 +34,18 @@ def _cisti_streamlit_cache():
     yield
     st.cache_data.clear()
     st.cache_resource.clear()
+
+
+@pytest.fixture
+def upis_dozvoljen():
+    """Za vrijeme testa uključi `tablice.PISANJE` (lažni Sheet), poslije ga vrati na staro.
+
+    Vraćeno 21.11.2026.: HANDOVER od 20.11. kaže da je ovaj fixture u conftestu, ali u datoteci
+    na disku ga nije bilo, pa je 25 testova padalo već pri postavljanju („fixture not found").
+    """
+    import tablice
+
+    staro = tablice.PISANJE
+    tablice.postavi_pisanje(True)
+    yield
+    tablice.postavi_pisanje(staro)

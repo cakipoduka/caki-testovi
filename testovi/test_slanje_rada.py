@@ -197,3 +197,30 @@ def test_nepoznata_greska_nosi_googleovu_poruku():
     e = _HttpError(400, {"error": {"errors": [{"reason": "badRequest"}],
                                    "message": "Invalid parents"}})
     assert "Invalid parents" in drive.opis_greske(e)
+
+
+# ------------------------------------------------------------------ 24.11.: zavrsetak (nakon testa)
+
+class _DriveServis:
+    def files(self):
+        return self
+
+    def create(self, **kw):
+        return self
+
+    def execute(self):
+        return {"id": "1", "webViewLink": "https://drive.google.com/file/d/1"}
+
+
+def test_zavrsetak_u_caki_testovi_koristi_radovi():
+    import zavrsetak
+    assert zavrsetak._radovi_modul().__name__ == "radovi"
+
+
+def test_posalji_postupak_zapise_rad(sheet, upis_dozvoljen):
+    import zavrsetak
+    rez = zavrsetak.posalji_postupak(sheet, pokusaj={"pokusaj_id": "P1"}, ucenik_id="OH3229",
+                                     datoteke=[{"naziv": "C.jpg", "bajtovi": b"jpg"}],
+                                     folder="F", servis=_DriveServis())
+    assert rez["greske"] == []
+    assert _radovi(sheet)[0]["veza"] == "https://drive.google.com/file/d/1"

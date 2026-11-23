@@ -29,11 +29,24 @@ def _cisti_streamlit_cache():
     except ModuleNotFoundError:                 # pragma: no cover
         yield
         return
+    _cisti_tablice()
     st.cache_data.clear()
     st.cache_resource.clear()
     yield
     st.cache_data.clear()
     st.cache_resource.clear()
+    _cisti_tablice()
+
+
+def _cisti_tablice() -> None:
+    """24.11.2026.: `tablice.py` ima i VLASTITU predmemoriju, s ključem `id(sheet)`. Python ponovo
+    koristi isti id kad stari lažni Sheet nestane, pa novi test zna dobiti retke prethodnog
+    (u portalu se to i dogodilo). Dosad je ovdje prolazilo slučajno."""
+    try:
+        import tablice
+        tablice._ocisti_cache()
+    except Exception:                           # noqa: BLE001
+        pass
 
 
 @pytest.fixture

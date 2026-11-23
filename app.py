@@ -1490,36 +1490,43 @@ if _akt == "👥 Objavi":
 
 if _akt == "📊 Rezultati":
     upute.prikazi(st, "rezultati")
-    # ŽALBE NA OCJENU (rok 5 dana) — ispravka ide u Izmjene_ocjena
-    with st.expander("Žalbe na ocjenu"):
-        try:
-            _zal = zalbe.otvorene(_sheet())
-            if not _zal:
-                st.caption("Nema otvorenih žalbi.")
-            else:
-                st.caption(f"Otvorenih žalbi: {len(_zal)}")
-                for _z in _zal:
-                    _zid_z = model.tekst(_z.get("zalba_id"))
-                    st.markdown(f"**{_zid_z}** · pokusaj {model.tekst(_z.get('pokusaj_id'))}"
-                                f" · zadatak {model.tekst(_z.get('zadatak_id'))}")
-                    st.caption(f"Razlog: {model.tekst(_z.get('razlog')) or '—'} "
-                               f"(rok do {model.datum_hr(_z.get('rok_do')) or '—'})")
-                    _c1, _c2, _c3 = st.columns([2, 2, 2])
-                    _obraz = _c1.text_input("Obrazloženje", key=f"v2_zal_o_{_zid_z}")
-                    if _c2.button("✅ Prihvati i ispravi", key=f"v2_zal_ok_{_zid_z}"):
-                        if zalbe.prihvati_i_ispravi(_sheet(), _zid_z, tocno=True,
-                                                    obrazlozenje=_obraz, profesor="caki"):
-                            st.success("Žalba prihvaćena, ocjena ispravljena (s tragom).")
-                            _osvjezi()
-                        else:
-                            st.error("Ispravka nije uspjela — postoji li ocjena tog zadatka?")
-                    if _c3.button("❌ Odbij", key=f"v2_zal_no_{_zid_z}"):
-                        zalbe.odgovori(_sheet(), _zid_z, prihvati=False,
-                                       odgovor=_obraz, tko="caki")
-                        st.info("Žalba odbijena.")
-                        _osvjezi()
-        except Exception as _e_zal:                     # noqa: BLE001
-            st.caption(f"Žalbe trenutno nisu dostupne: {_e_zal}")
+    # ⚖️ ŽALBE NA OCJENU — 24.11.2026. (Caki): žalba mora biti VIDLJIVA i profesor JEDNOM
+    # odgovara + odlučuje o bodovima. Prije: zatvoren expander sa samim ID-jevima.
+    try:
+        _zal = zalbe.otvorene(_sheet())
+    except Exception as _e_zal:                         # noqa: BLE001
+        _zal = []
+        st.caption(f"Žalbe trenutno nisu dostupne: {_e_zal}")
+    if _zal:
+        st.warning(f"⚖️ **{len(_zal)}** žalb{'a čeka' if len(_zal) == 1 else 'e čekaju'} "
+                   "tvoj odgovor.")
+    with st.expander(f"⚖️ Žalbe na ocjenu — otvorenih: {len(_zal)}", expanded=bool(_zal)):
+        if not _zal:
+            st.caption("Nema otvorenih žalbi. Zaključene žalbe vidiš uz zadatak u pregledu po učeniku.")
+        _imena_z = _svi_ucenici_map()
+        _pok_po_id = {model.tekst(_p.get("pokusaj_id")): _p for _p in _pokusaji()}
+        _naziv_testa = {model.tekst(_t.get("definicija_id")): model.tekst(_t.get("naziv"))
+                        for _t in _testovi()}
+        for _z in _zal:
+            _p = _pok_po_id.get(model.tekst(_z.get("pokusaj_id")), {})
+            _uid = model.tekst(_z.get("ucenik_id") or _p.get("ucenik_id")).upper()
+            _zad_id = model.tekst(_z.get("zadatak_id"))
+            _zadaci_p = [x for x in model.kao_json(_p.get("zadaci_json")) if isinstance(x, dict)]
+            _rbr = next((n for n, x in enumerate(_zadaci_p, start=1)
+                         if model.tekst(x.get("id")) == _zad_id), None)
+            _tekst_z = next((model.tekst(x.get("tekst")) for x in _zadaci_p
+                             if model.tekst(x.get("id")) == _zad_id), "")
+            st.markdown(f"**{_imena_z.get(_uid, '') or _uid}** · {_uid} · "
+                        f"{_naziv_testa.get(model.tekst(_p.get('definicija_id')), '') or 'test'} · "
+                        f"zadatak {_rbr or _zad_id}")
+            if _tekst_z:
+                st.caption(_tekst_z[:220] + ("…" if len(_tekst_z) > 220 else ""))
+            _ocj_z = next((r for r in tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
+                           if model.tekst(r.get("pokusaj_id")) == model.tekst(_z.get("pokusaj_id"))
+                           and model.tekst(r.get("zadatak_id")) == _zad_id), {})
+            ekran_ucenika.prikazi_zalbu_profesoru(
+                st, _sheet(), _z, kljuc="v2_zal_popis", max_bodovi=_ocj_z.get("max"))
+            st.divider()
 
     testovi = _testovi()
     if not testovi:
@@ -1732,7 +1739,8 @@ if _akt == "📊 Rezultati":
                     ekran_ucenika.prikazi_pregled_rjesenja(
                         st, zadaci_r, odg,
                         pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True,
-                        sheet=_sheet(), pokusaj=p, ucenik_id=model.tekst(p.get("ucenik_id")))
+                        sheet=_sheet(), pokusaj=p, ucenik_id=model.tekst(p.get("ucenik_id")),
+                        kljuc=f"v2_pregled_{_pid}", uloga="profesor")
 
 
     # ---------------------------------------------------------------- ✏️ RUČNA PROVJERA

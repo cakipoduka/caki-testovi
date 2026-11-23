@@ -152,29 +152,31 @@ def _kartica(dodjela: dict, definicija: dict, pokusaj) -> None:
                                              key=f"v2u_rad_{kljuc}")
                 _link = st.text_input("…ili zalijepi poveznicu (npr. s mobitela)",
                                       key=f"v2u_rad_link_{kljuc}")
+                _poruka_kljuc = f"v2u_rad_poruka_{kljuc}"
                 if st.button("📤 Pošalji rad", key=f"v2u_rad_salji_{kljuc}"):
+                    # 23.11.2026.: odluka „smije li se zapisati" je u `radovi.posalji_ucenikov_rad`
+                    # (isto kao u Moj CAKI). Poruka se čuva u session_state, jer bi je `st.rerun()`
+                    # inače odmah izbrisao — zato se razlog greške prije nikad nije vidio.
                     try:
-                        _veza = ""
-                        if _datoteka is not None:
-                            _bajtovi = _datoteka.getvalue()
-                            _folder = drive.folder_id(st.secrets)
-                            _veza, _greska = drive.ucitaj(_bajtovi, radovi.sef_datoteke(_datoteka.name),
-                                                          folder=_folder)
-                            if _greska:
-                                st.warning(_greska + " Pošalji kao poveznicu ispod.")
-                        radovi.dodaj_ucenikov_rad(
+                        _rez = radovi.posalji_ucenikov_rad(
                             st.session_state["_v2u_sheet"], pokusaj_id=_pid,
                             ucenik_id=model.tekst(dodjela.get("ucenik_id")),
-                            veza=_veza or model.tekst(_link),
-                            sadrzaj=(_datoteka.getvalue() if (_datoteka and not _veza) else None),
-                            naziv=(_datoteka.name if _datoteka else "Poveznica"))
+                            bajtovi=_datoteka.getvalue() if _datoteka is not None else None,
+                            naziv_datoteke=_datoteka.name if _datoteka is not None else "Poveznica",
+                            poveznica=_link, folder=drive.folder_id(st.secrets))
+                    except Exception as e:              # noqa: BLE001
+                        _rez = {"ok": False, "poruka": f"Rad nije poslan: {e}", "tehnicki": ""}
+                    st.session_state[_poruka_kljuc] = _rez
+                    if _rez["ok"]:
                         posjete.zabiljezi(st.session_state["_v2u_sheet"],
                                           ucenik_id=model.tekst(dodjela.get("ucenik_id")),
                                           radnja="rad", detalj=kljuc)
-                        st.success("Rad je poslan profesoru. ✅")
                         st.rerun()
-                    except Exception as e:              # noqa: BLE001
-                        st.error(f"Rad nije poslan: {e}")
+                _rez_p = st.session_state.get(_poruka_kljuc)
+                if _rez_p:
+                    (st.success if _rez_p["ok"] else st.error)(_rez_p["poruka"])
+                    if _rez_p.get("tehnicki"):
+                        st.caption(f"Tehnički detalj (za Cakija): {_rez_p['tehnicki']}")
 
         if pokusaj and zavrsetak.je_zavrsen(pokusaj):
             # 31.10.2026.: „po isteku" je također završen test (prije se ovdje nudio „Nastavi").

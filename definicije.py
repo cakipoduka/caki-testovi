@@ -668,14 +668,23 @@ def postavi_aktivan(sheet, definicija_id: str, aktivan: bool, *, korisnik: str =
 
 def zatvori_odmah(sheet, definicija_id: str, *, korisnik: str = "") -> tuple[bool, str]:
     """v1 „Zatvori test odmah" (L2137): rok se postavlja na **jučer** → nitko novi ne piše, a
-    predani odmah vide rješenja."""
+    predani odmah vide rješenja.
+
+    23.11.2026.: postavlja i `status = zatvoren`. Sam datum nije bio dovoljan: učenik kojem je
+    test dodijeljen danas (pravilo „dodan poslije roka → rok je dan dodjele") i dalje je imao
+    otvoren rok, pa nije vidio rješenja. `dodjele.stanje_roka()` sada status poštuje.
+    Arhivirani test ostaje arhiviran.
+    """
     from datetime import date, timedelta
 
     d = po_id(sheet, definicija_id)
     if not d:
         return False, "Test ne postoji."
     jučer = (date.today() - timedelta(days=1)).isoformat()
-    ok, razlog = izmijeni(sheet, d, {"rok_do": jučer}, korisnik=korisnik)
+    promjene = {"rok_do": jučer}
+    if model.tekst(d.get("status")) != "arhiviran":
+        promjene["status"] = "zatvoren"
+    ok, razlog = izmijeni(sheet, d, promjene, korisnik=korisnik)
     if ok:
         try:
             tablice.zapisi_radnju(sheet, korisnik or "caki", "zatvori_odmah",

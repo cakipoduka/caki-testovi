@@ -36,6 +36,7 @@ import brend
 import builder
 import definicije
 import distraktori
+import drive
 import dodjele
 import ekran_ucenika
 import grupe
@@ -1275,8 +1276,65 @@ if _akt == "👥 Objavi":
         _k1.metric("Zadataka", _d.get("broj_zadataka"))
         _k2.metric("Bodova", _d.get("bodovi_ukupno"))
         _k3.metric("Rok", f"{model.datum_hr(_u_roku['od'])} – {model.datum_hr(_u_roku['do'])}")
-        _k4.metric("Dodijeljeno", len([x for x in _dodjele()
-                                       if model.tekst(x.get("definicija_id")) == _odabir_t]))
+        _dodjele_testa = [x for x in _dodjele()
+                          if model.tekst(x.get("definicija_id")) == _odabir_t]
+        _k4.metric("Dodijeljeno", len(_dodjele_testa))
+
+        # 23.11.2026. (Caki): „OBAVEZNO omogućiti brisanje učenika s ispita ako je slučajno dodan."
+        # Logika je u `dodjele.ukloni_ucenika()`; ovdje je samo sučelje.
+        with st.expander(f"🧑‍🎓 Kome je test dodijeljen ({len(_dodjele_testa)}) — ukloni učenika"):
+            if not _dodjele_testa:
+                st.caption("Test još nije nikome dodijeljen.")
+            else:
+                _pok_po_dod: dict = {}
+                for _p in _pokusaji():
+                    _pok_po_dod.setdefault(model.tekst(_p.get("dodjela_id")), []).append(_p)
+                _imena_u = _svi_ucenici_map()
+
+                def _opis_dodjele(_x: dict) -> str:
+                    _uid = model.tekst(_x.get("ucenik_id")).upper()
+                    _ime = model.tekst(_x.get("ime_djeteta")) or _imena_u.get(_uid, "")
+                    _pp = _pok_po_dod.get(model.tekst(_x.get("dodjela_id")), [])
+                    if any(model.je_predan(_p) for _p in _pp):
+                        _st = "predao"
+                    elif _pp:
+                        _st = "u tijeku"
+                    else:
+                        _st = "nije počeo"
+                    return f"{_ime or '—'} · {_uid} · {_st}"
+
+                st.dataframe([{"Učenik": _opis_dodjele(_x).split(" · ")[0],
+                               "Šifra": model.tekst(_x.get("ucenik_id")).upper(),
+                               "Stanje": _opis_dodjele(_x).split(" · ")[2],
+                               "Dodjela": model.tekst(_x.get("dodjela_id"))}
+                              for _x in _dodjele_testa], hide_index=True, width="stretch")
+
+                _po_id_d = {model.tekst(_x.get("dodjela_id")): _x for _x in _dodjele_testa}
+                _odabrana_d = st.selectbox("Koga uklanjam", list(_po_id_d),
+                                           format_func=lambda i: _opis_dodjele(_po_id_d[i]),
+                                           key=f"v2_ukl_{_odabir_t}")
+                _ima_rez = bool(_pok_po_dod.get(_odabrana_d))
+                _s_rez = False
+                if _ima_rez:
+                    try:
+                        _op = dodjele.opseg_uklanjanja(_sheet(), _odabrana_d)
+                        st.warning(
+                            f"Ovaj učenik ima rezultat: pokušaja **{_op['pokusaji']}**, ocjena "
+                            f"zadataka **{_op['ocjene']}**, žalbi **{_op['zalbe']}**, priloženih "
+                            f"radova **{_op['radovi']}**. Ukloniti ga možeš samo zajedno s tim.")
+                    except Exception as _e_op:          # noqa: BLE001
+                        st.warning(f"Učenik ima rezultat (opseg se ne može prebrojati: {_e_op}).")
+                    _s_rez = st.checkbox("Obriši i njegov rezultat — nepovratno",
+                                         key=f"v2_ukl_rez_{_odabrana_d}")
+                if st.button("🗑️ Ukloni učenika s testa", key=f"v2_ukl_gumb_{_odabrana_d}",
+                             disabled=_ima_rez and not _s_rez):
+                    _rez_u = dodjele.ukloni_ucenika(_sheet(), _odabrana_d, s_rezultatom=_s_rez,
+                                                    korisnik="caki")
+                    if _rez_u["uklonjeno"]:
+                        st.success(f"Uklonjeno: {_opis_dodjele(_po_id_d[_odabrana_d])}.")
+                        _osvjezi()
+                    else:
+                        st.error(_rez_u["razlog"] or "Nije uklonjeno.")
 
         st.divider()
         # ============================================================ KOME OBJAVLJUJEM (jedini blok)
@@ -2320,6 +2378,15 @@ if _akt == "⚙️ Postavke":
             samoprovjera.prikazi(st)
         except Exception as _e_sp:                 # noqa: BLE001
             st.caption(f"Samoprovjera nije dostupna: {_e_sp}")
+
+    st.markdown("**📁 Drive za radove učenika**")
+    # 23.11.2026.: provjera bez upisa — koji servisni račun, vidi li mapu, smije li dodavati.
+    # Napomena: ovo provjerava Secrets OVE aplikacije; Moj CAKI ima svoje Secrets.
+    if st.button("Provjeri pristup mapi za radove", key="v2_drive_provjera"):
+        _pd = drive.provjeri_pristup(drive.folder_id(st.secrets))
+        (st.success if _pd["ok"] else st.error)(_pd["poruka"])
+        if _pd["email"]:
+            st.caption(f"Servisni račun: `{_pd['email']}` (iz `{_pd['kljuc']}`)")
 
     st.markdown("**📄 Sheet koji aplikacija vidi**")
     try:

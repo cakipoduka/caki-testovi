@@ -181,8 +181,10 @@ def test_profesor_vidi_zalbu_odgovara_i_zakljucuje(tmp_path, upis_dozvoljen):
     assert _zalba(s)["status"] == "prihvacena"
     assert model_broj(_ocjena(s, "Z11")["bodovi"]) == 1
     tekst = _sve(at)
-    assert "zaključeno" in tekst and "bodovi priznati" in tekst
-    assert not [t for t in at.text_area if "Odgovor učeniku" in t.label]   # više se ne može
+    assert "bodovi priznati" in tekst
+    assert not [t for t in at.text_area if "Odgovor učeniku" in t.label]
+    # 24.11.: ne zaključava se konačno — postoji gumb za ispravak
+    assert [b for b in at.button if b.label == "✏️ Ispravi odgovor ili odluku"]
 
 
 def test_profesor_bez_odluke_ne_zakljucuje(tmp_path, upis_dozvoljen):
@@ -203,3 +205,56 @@ def test_ucenik_vidi_odgovor_i_odluku(tmp_path, upis_dozvoljen):
     assert "Traži se četiri decimale." in tekst and "bodovi nisu priznati" in tekst
     # na Z11 nema novog obrasca; na Z8 (bez žalbe) obrazac postoji
     assert len([t for t in at.text_area if "Žalba" in t.label]) == 1
+
+
+# ------------------------------------------------------------------ 24.11.: ispravak profesora
+
+def test_ispravak_priznato_u_nepriznato_vraca_bodove(upis_dozvoljen):
+    s = _sheet([ZALBA])
+    zalbe.zakljuci(s, "Z26-0001", priznaj=True, odgovor="Priznajem.")
+    assert model_broj(_ocjena(s, "Z11")["bodovi"]) == 1
+    ok, poruka = zalbe.ispravi(s, "Z26-0001", priznaj=False, odgovor="Ipak ne — 4 decimale.")
+    assert ok, poruka
+    assert _zalba(s)["status"] == "odbijena" and _zalba(s)["odgovor"] == "Ipak ne — 4 decimale."
+    assert model_broj(_ocjena(s, "Z11")["bodovi"]) == 0
+    assert model_broj(tablice.ucitaj(s, "Pokusaji")[0]["bodovi"]) == 0
+    povodi = [r["povod"] for r in tablice.ucitaj(s, "Izmjene_ocjena")]
+    assert povodi == ["zalba", "zalba_ispravak"]
+
+
+def test_ispravak_nepriznato_u_priznato_daje_bodove(upis_dozvoljen):
+    s = _sheet([ZALBA])
+    zalbe.zakljuci(s, "Z26-0001", priznaj=False, odgovor="Ne.")
+    ok, _ = zalbe.ispravi(s, "Z26-0001", priznaj=True, odgovor="Pogledao sam ponovo — da.")
+    assert ok and _zalba(s)["status"] == "prihvacena"
+    assert model_broj(_ocjena(s, "Z11")["bodovi"]) == 1
+
+
+def test_ispravak_samo_teksta_ne_dira_bodove(upis_dozvoljen):
+    s = _sheet([ZALBA])
+    zalbe.zakljuci(s, "Z26-0001", priznaj=False, odgovor="Ne.")
+    ok, poruka = zalbe.ispravi(s, "Z26-0001", priznaj=False, odgovor="Ne, traži se 4 decimale.")
+    assert ok and "odluka ista" in poruka
+    assert tablice.ucitaj(s, "Izmjene_ocjena") == []
+    assert _zalba(s)["odgovor"] == "Ne, traži se 4 decimale."
+
+
+def test_ispravak_zahtijeva_odgovor(upis_dozvoljen):
+    s = _sheet([{**ZALBA, "status": "odbijena", "odgovor": "Ne."}])
+    ok, poruka = zalbe.ispravi(s, "Z26-0001", priznaj=True, odgovor="")
+    assert not ok and _zalba(s)["status"] == "odbijena"
+
+
+def test_ispravak_kroz_sucelje(tmp_path, upis_dozvoljen):
+    s = _sheet([{**ZALBA, "status": "odbijena", "odgovor": "Ne."}])
+    at = _app(tmp_path, s, "profesor")
+    [b for b in at.button if b.label == "✏️ Ispravi odgovor ili odluku"][0].click()
+    at.run()
+    [t for t in at.text_area if "Ispravljeni odgovor" in t.label][0].input("Ipak priznajem.")
+    odl = [r for r in at.radio if r.label == "Odluka o bodovima"][0]
+    odl.set_value(odl.options[0])
+    [b for b in at.button if b.label == "Spremi ispravak"][0].click()
+    at.run()
+    assert not at.exception, [str(e.value) for e in at.exception]
+    assert _zalba(s)["status"] == "prihvacena"
+    assert model_broj(_ocjena(s, "Z11")["bodovi"]) == 1

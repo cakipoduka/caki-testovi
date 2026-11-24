@@ -39,6 +39,8 @@ import distraktori
 import drive
 import dodjele
 import ekran_ucenika
+import formule_testa
+import galerija_radova
 import grupe
 import izvjestaj
 import matrica
@@ -575,6 +577,60 @@ if _akt == "🧪 Testovi":
                         for _r in _redci_sv) or '<p class="kc-prazno">Nije postavljeno.</p>')
                 except Exception as _e_sv:              # noqa: BLE001
                     st.caption(f"Student View trenutno nije dostupan: {_e_sv}")
+
+            # ---------------------------------------------------------- 📐 formule uz test
+            # 24.11.2026. (Caki): opcija iz v1 — formule iz baze (📐 Formule u caki-zadaci),
+            # u test ide zamrznuta kopija; učenik ih otvara gumbom „📐 Formule" tijekom testa.
+            with tema.kutija("tt_formule"):
+                st.markdown("##### 📐 Formule uz test")
+                try:
+                    _f_sad = formule_testa.iz_definicije(_d_l)
+                    _f_baza = formule_testa.ucitaj_iz_baze(_baza())
+                    if _status_l != "arhiviran" and _f_baza:
+                        _pak_sad, _id_sad = formule_testa.trenutni_izbor(_d_l)
+                        _aktivne_f = formule_testa.aktivne(_f_baza)
+                        _naslovi_f = {model.tekst(f.get("formula_id")):
+                                      model.tekst(f.get("naslov")) or model.tekst(f.get("formula_id"))
+                                      for f in _aktivne_f}
+                        _paketi_f = formule_testa.paketi(_f_baza)
+                        with st.form(f"v2_formule_{_odabir_l}"):
+                            _sve_f = st.checkbox("Sve aktivne formule iz baze", value=False,
+                                                 key=f"v2_f_sve_{_odabir_l}")
+                            _pak_f = st.multiselect(
+                                "Paketi", _paketi_f, default=[x for x in _pak_sad if x in _paketi_f],
+                                key=f"v2_f_pak_{_odabir_l}")
+                            _id_f = st.multiselect(
+                                "Pojedinačne formule", list(_naslovi_f),
+                                default=[x for x in _id_sad if x in _naslovi_f
+                                         and not any(model.tekst(f.get("paket")) in _pak_f
+                                                     for f in _f_sad
+                                                     if model.tekst(f.get("formula_id")) == x)],
+                                format_func=lambda i: _naslovi_f.get(i, i),
+                                key=f"v2_f_id_{_odabir_l}")
+                            if st.form_submit_button("💾 Spremi formule uz test", type="primary"):
+                                _izbor_f = formule_testa.izbor_za_test(_f_baza, _pak_f, _id_f,
+                                                                       sve=_sve_f)
+                                _ok_f, _raz_f = definicije.izmijeni(
+                                    _sheet(), _d_l, {"formule_json": formule_testa.u_json(_izbor_f)},
+                                    korisnik="caki")
+                                if _ok_f:
+                                    st.success(f"Spremljeno: {len(_izbor_f)} formula uz test.")
+                                    _osvjezi()
+                                else:
+                                    st.error(_raz_f)
+                    elif not _f_baza:
+                        st.caption("U bazi nema formula — dodaj ih na stranici 📐 Formule u "
+                                   "aplikaciji baze zadataka (caki-zadaci).")
+                    if _f_sad:
+                        st.caption(f"Učenik uz ovaj test vidi **{len(_f_sad)}** formula: "
+                                   + ", ".join(model.tekst(f.get("naslov")) for f in _f_sad[:8])
+                                   + (" …" if len(_f_sad) > 8 else ""))
+                        with st.expander("Pogledaj kako ih učenik vidi"):
+                            formule_testa.prikazi_popis(st, _f_sad)
+                    else:
+                        st.caption("Uz ovaj test učenik ne vidi formule.")
+                except Exception as _e_f:               # noqa: BLE001
+                    st.caption(f"Formule trenutno nisu dostupne: {_e_f}")
 
             # ---------------------------------------------------------- radnje
             with tema.kutija("tt_radnje"):
@@ -1736,11 +1792,36 @@ if _akt == "📊 Rezultati":
                         st.caption(f"Izvještaj se ne može pripremiti: {e}")
 
                     odg = provedba.odgovori(p)
-                    ekran_ucenika.prikazi_pregled_rjesenja(
-                        st, zadaci_r, odg,
-                        pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True,
-                        sheet=_sheet(), pokusaj=p, ucenik_id=model.tekst(p.get("ucenik_id")),
-                        kljuc=f"v2_pregled_{_pid}", uloga="profesor")
+
+                    def _pregled_zadataka():
+                        ekran_ucenika.prikazi_pregled_rjesenja(
+                            st, zadaci_r, odg,
+                            pokazi_rjesenja=True, pokazi_video=True, pokazi_bodove=True,
+                            sheet=_sheet(), pokusaj=p, ucenik_id=model.tekst(p.get("ucenik_id")),
+                            kljuc=f"v2_pregled_{_pid}", uloga="profesor")
+
+                    # 🖼️ 24.11.2026. (Caki): ocjenjivanje i radovi u jednom prozoru —
+                    # lijevo zadaci (vlastiti klizač), desno priloženi radovi.
+                    _uz_radove = st.toggle(
+                        "🖼️ Ocjenjuj uz radove (lijevo zadaci, desno slike/PDF učenika)",
+                        value=any(model.tekst(_r.get("veza")) for _r in _radovi),
+                        key=f"v2_uz_radove_{_pid}")
+                    if _uz_radove:
+                        _lijevo, _desno = st.columns([1.1, 1], gap="medium")
+                        with _lijevo:
+                            with st.container(height=880):
+                                _pregled_zadataka()
+                        with _desno:
+                            def _potvrdi_rad(_rid):
+                                try:
+                                    radovi.potvrdi(_sheet(), _rid)
+                                    _osvjezi()
+                                except Exception as _e_p:   # noqa: BLE001
+                                    st.error(f"Nije uspjelo: {_e_p}")
+                            galerija_radova.prikazi(st, _radovi, kljuc=f"v2_gal_{_pid}",
+                                                    potvrdi=_potvrdi_rad)
+                    else:
+                        _pregled_zadataka()
 
 
     # ---------------------------------------------------------------- ✏️ RUČNA PROVJERA

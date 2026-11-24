@@ -1751,20 +1751,8 @@ if _akt == "📊 Rezultati":
                                         _osvjezi()
                                     except Exception as e:   # noqa: BLE001
                                         st.error(f"Nije uspjelo: {e}")
-                    with st.form(f"v2_rad_form_{_pid}"):
-                        _veza = st.text_input("Poveznica na sken (Drive, mobitel…)",
-                                              key=f"v2_rad_veza_{_pid}")
-                        _naziv = st.text_input("Naziv", value="Skenirani rad",
-                                              key=f"v2_rad_naziv_{_pid}")
-                        if st.form_submit_button("📎 Priloži rad") and model.tekst(_veza):
-                            try:
-                                radovi.dodaj_vezu(_sheet(), pokusaj_id=_pid,
-                                                  ucenik_id=model.tekst(x.get("ucenik_id")),
-                                                  veza=_veza, naziv=_naziv)
-                                st.success("Rad priložen.")
-                                _osvjezi()
-                            except Exception as e:       # noqa: BLE001
-                                st.error(f"Nije uspjelo: {e}")
+                    # 24.11.2026. (Caki): obrazac „Poveznica na sken / Priloži rad" uklonjen —
+                    # rad prilaže UČENIK u Moj CAKI, profesor ga ovdje samo pregledava.
 
                     # 📄 izvještaj za roditelje (HTML → ispiši kao PDF; hrvatski znakovi rade)
                     try:
@@ -1841,6 +1829,7 @@ if _akt == "📊 Rezultati":
                 _ocjene_rp = [r for r in tablice.ucitaj(_sheet(), tablice.TAB_OCJENE)
                               if model.tekst(r.get("pokusaj_id")) == _pid]
                 _po_zadatku = {model.tekst(r.get("zadatak_id")): r for r in _ocjene_rp}
+                _ocj_rp_map = ekran_ucenika._ocjene_pokusaja(_sheet(), {"pokusaj_id": _pid})
 
                 for _i, _z in enumerate(_zadaci_rp, start=1):
                     _zid = model.tekst(_z.get("id"))
@@ -1873,31 +1862,11 @@ if _akt == "📊 Rezultati":
                         if model.tekst(_red.get("izvor_ocjene")) in ("ai", "?"):
                             st.caption(f"⚠️ Ocjena je nesigurna (izvor: "
                                        f"{model.tekst(_red.get('izvor_ocjene'))}) — provjeri ručno.")
-                        _c1, _c2, _c3 = st.columns([1, 1, 3])
-                        _tocno = _c1.checkbox(
-                            "Točno", value=model.tekst(_red.get("tocno")).lower() in ("da", "true"),
-                            key=f"v2_rp_t_{_pid}_{_zid}")
-                        _bod = _c2.text_input(
-                            "Bodovi", value=str(model.broj(_red.get("bodovi"),
-                                                           _red.get("max") or _z.get("bodovi") or 1)
-                                                ).replace(".", ","),
-                            key=f"v2_rp_b_{_pid}_{_zid}")
-                        _kom = _c3.text_input(
-                            "Komentar (vidi ga učenik)", value=model.tekst(_red.get("komentar")),
-                            key=f"v2_rp_k_{_pid}_{_zid}")
-                        if st.button("💾 Spremi ovaj zadatak", key=f"v2_rp_gumb_{_pid}_{_zid}"):
-                            try:
-                                _iznos = float(model.tekst(_bod).replace(",", "."))
-                            except ValueError:
-                                _iznos = None
-                            _ok = provedba.ocijeni_rucno(
-                                _sheet(), _pid, _zid, tocno=bool(_tocno), bodovi=_iznos,
-                                komentar=_kom, profesor="caki")
-                            if _ok:
-                                st.success("Spremljeno (ocjena + komentar + trag).")
-                                _osvjezi()
-                            else:
-                                st.error("Nije spremljeno — postoji li ocjena tog zadatka?")
+                        # 24.11.2026.: isti obrazac kao u pregledu po učeniku — ostavi /
+                        # točno / 🟡 djelomično (bodovi) / netočno, kao v1 „Provjera i ispravak".
+                        ekran_ucenika.prikazi_ispravak_ocjene(
+                            st, _sheet(), _pid, _z, _ocj_rp_map.get(_zid) or {},
+                            kljuc=f"v2_rp_{_pid}")
         except Exception as _e_rp:                      # noqa: BLE001
             st.caption(f"Ručna provjera trenutno nije dostupna: {_e_rp}")
 
